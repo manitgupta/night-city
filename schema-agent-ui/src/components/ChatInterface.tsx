@@ -3,9 +3,13 @@ import { Send, Bot, User, Sparkles, Code2, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, Message } from "../store";
 import { api } from "../services/api";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export function ChatInterface() {
-  const { messages, addMessage, isAgentTyping, setAgentTyping, selection, setSourceCode } = useStore();
+  const { messages, addMessage, isAgentTyping, setAgentTyping, selection } = useStore();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -97,11 +101,35 @@ export function ChatInterface() {
                 {msg.role === 'agent' ? <Bot size={16} /> : <User size={16} />}
               </div>
               <div className={`flex flex-col gap-2 max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.role === 'agent'
+                <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed prose prose-invert prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-900 prose-pre:p-0 prose-pre:rounded-lg max-w-none ${msg.role === 'agent'
                     ? 'bg-zinc-800 text-zinc-100'
                     : 'bg-indigo-600 text-white'
                   }`}>
-                  {msg.content}
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code(props) {
+                        const { children, className, node, ref, ...rest } = props
+                        const match = /language-(\w+)/.exec(className || '')
+                        return match ? (
+                          <SyntaxHighlighter
+                            {...rest}
+                            PreTag="div"
+                            children={String(children).replace(/\n$/, '')}
+                            language={match[1]}
+                            style={vscDarkPlus}
+                            customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b' }}
+                          />
+                        ) : (
+                          <code {...rest} className={className}>
+                            {children}
+                          </code>
+                        )
+                      }
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
 
                 {msg.suggestedFix && (
