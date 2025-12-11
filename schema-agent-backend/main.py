@@ -24,7 +24,11 @@ async def health_check():
 @app.post("/convert", response_model=ConversionResponse)
 async def convert_schema(request: ConversionRequest):
     try:
-        result = await agent_service.convert_schema(request.source_ddl, request.source_dialect)
+        result = await agent_service.convert_schema(
+            request.source_ddl, 
+            request.source_dialect, 
+            verify_ddl=request.verify_ddl
+        )
         return ConversionResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

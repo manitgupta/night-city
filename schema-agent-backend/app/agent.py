@@ -44,12 +44,12 @@ class SchemaAgentService:
             cls._instance = cls()
         return cls._instance
 
-    async def convert_schema(self, source_ddl: str, dialect: str) -> Dict[str, Any]:
+    async def convert_schema(self, source_ddl: str, dialect: str, verify_ddl: bool = False) -> Dict[str, Any]:
         """
         Orchestrates conversion with verification loop.
         """
         logs = []
-        logger.info(f"Starting conversion for dialect: {dialect}")
+        logger.info(f"Starting conversion for dialect: {dialect}, verify_ddl={verify_ddl}")
         logger.info(f"Source DDL: {source_ddl[:50]}...")
         
         # Initial Prompt
@@ -68,7 +68,7 @@ class SchemaAgentService:
         
         current_ddl = ""
         attempt = 0
-        max_attempts = 3
+        max_attempts = 3 if verify_ddl else 1
         
         while attempt < max_attempts:
             attempt += 1
@@ -80,6 +80,10 @@ class SchemaAgentService:
             logger.info("Received response from agent")
             current_ddl = self._extract_sql(response_text)
             
+            if not verify_ddl:
+                logs.append("Verification skipped (user disabled).")
+                break
+
             # Verify
             verification = await verifier.verify_ddl(current_ddl)
             if verification["valid"]:

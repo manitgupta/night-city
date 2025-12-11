@@ -16,6 +16,7 @@ const SOURCE_DIALECTS = [
 function App() {
   const [isSourceLocked, setIsSourceLocked] = useState(false); // Default to unlocked so user can paste
   const [isConverting, setIsConverting] = useState(false);
+  const [isVerificationEnabled, setIsVerificationEnabled] = useState(false);
   const [showDialectDropdown, setShowDialectDropdown] = useState(false);
   const [sourceDialect, setSourceDialect] = useState<string | null>(null);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode } = useStore();
@@ -28,7 +29,7 @@ function App() {
     setIsSourceLocked(true); // Auto-lock on convert
 
     try {
-      const result = await api.convertSchema(sourceCode, sourceDialect);
+      const result = await api.convertSchema(sourceCode, sourceDialect, isVerificationEnabled);
       setOutputCode(result.converted_ddl);
 
       const logsSummary = result.logs.length > 0
@@ -169,6 +170,36 @@ function App() {
               type="output"
               showHint={true}
               readOnly={false} // Always editable/selectable per previous request
+              isLoading={isConverting}
+              headerActions={
+                <div className="flex items-center gap-2 mr-2">
+                  <div className="flex items-center gap-2 group relative">
+                    <input
+                      type="checkbox"
+                      id="verify-checkbox"
+                      checked={isVerificationEnabled}
+                      onChange={(e) => setIsVerificationEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-0 cursor-pointer"
+                    />
+                    <label
+                      htmlFor="verify-checkbox"
+                      className="text-xs font-medium text-zinc-400 cursor-pointer select-none group-hover:text-zinc-200 transition-colors"
+                    >
+                      Enable verification?
+                    </label>
+
+                    {/* Tooltip on hover */}
+                    {isVerificationEnabled && (
+                      <div className="absolute top-full right-0 mt-3 w-64 p-2 bg-zinc-900/95 backdrop-blur-xl border border-indigo-500/30 rounded-lg shadow-xl text-xs text-zinc-300 z-50 animate-in fade-in slide-in-from-top-2 pointer-events-none">
+                        <p className="font-medium text-indigo-400 mb-1">Slow Operation Warning</p>
+                        This tool will attempt to verify the DDL against a real Spanner instance. This process may take longer.
+                        {/* Tip pointing UP to the checkbox */}
+                        <div className="absolute -top-1 right-8 w-2 h-2 bg-zinc-900 border-l border-t border-indigo-500/30 rotate-45"></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              }
             />
           </Panel>
 

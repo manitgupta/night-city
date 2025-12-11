@@ -11,7 +11,7 @@ export interface ChatResponse {
 const API_BASE_URL = "http://localhost:8001";
 
 export const api = {
-    async convertSchema(sourceDdl: string, sourceDialect: string): Promise<ConversionResponse> {
+    async convertSchema(sourceDdl: string, sourceDialect: string, verify: boolean): Promise<ConversionResponse> {
         const response = await fetch(`${API_BASE_URL}/convert`, {
             method: "POST",
             headers: {
@@ -20,6 +20,7 @@ export const api = {
             body: JSON.stringify({
                 source_ddl: sourceDdl,
                 source_dialect: sourceDialect,
+                verify_ddl: verify,
             }),
         });
 
