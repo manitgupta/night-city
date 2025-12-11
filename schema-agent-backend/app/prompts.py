@@ -1,6 +1,6 @@
 from typing import Optional
 
-def generate_cot_prompt(source_ddl: str, dialect: str) -> str:
+def generate_cot_prompt(source_ddl: str, dialect: str, hints: str = "") -> str:
     """
     Generates a Chain-of-Thought prompt for SQL conversion.
     """
@@ -21,6 +21,8 @@ Follow this rigid step-by-step reasoning process:
     *   `AUTO_INCREMENT` / `SERIAL` (Hotspot risk).
     *   `TIMESTAMP` usage (Timezone considerations).
     *   `TEXT` / `BLOB` (Size limits).
+
+{hints}
 
 ### STEP 2: PLAN SPANNER SCHEMA
 *   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).

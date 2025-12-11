@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from app.prompts import generate_cot_prompt
+from app.context_manager import context_manager
 
 # ... (Logging config remains same)
 
@@ -40,8 +41,18 @@ class SchemaAgentService:
         logs = []
         logger.info(f"Starting conversion for dialect: {dialect}, verify_ddl={verify_ddl}")
         
-        # Initial Prompt with CoT
-        prompt = generate_cot_prompt(source_ddl, dialect)
+        # Get Key Hints based on Source DDL
+        raw_hints = context_manager.get_hints(source_ddl)
+        formatted_hints = context_manager.format_hints_for_prompt(raw_hints)
+        
+        if formatted_hints:
+            logger.info(f"Found {len(raw_hints)} hints for context injection.")
+            logs.append(f"Injected {len(raw_hints)} context hints into prompt.")
+        else:
+            logger.info("No specific hints found.")
+        
+        # Initial Prompt with CoT and Hints
+        prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
         
         verifier = SpannerVerificationTool()
         
