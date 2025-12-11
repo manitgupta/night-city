@@ -5,20 +5,22 @@ import { useStore } from "../store";
 
 interface SchemaEditorProps {
   title: string;
-  isSource?: boolean;
+  type: 'source' | 'output';
+  interactive?: boolean;
 }
 
-export function SchemaEditor({
+export function SchemaEditor({ 
   title,
-  isSource = false
+  type,
+  interactive = false
 }: SchemaEditorProps) {
-  const { sourceCode, outputCode, setSourceCode, setSelection } = useStore();
+  const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection } = useStore();
   const editorRef = useRef<any>(null);
 
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
 
-    if (isSource) {
+    if (interactive) {
       editor.onDidChangeCursorSelection((e: any) => {
         const selection = e.selection;
         const model = editor.getModel();
@@ -28,19 +30,16 @@ export function SchemaEditor({
             code: content,
             startLine: selection.startLineNumber,
             endLine: selection.endLineNumber,
-            source: 'source'
+            source: type
           });
-        } else {
-          // Optional: clear selection if empty? 
-          // setSelection(null); 
-          // User might want to keep context if they just clicked away, but for now let's clear it
-          // actually standard behavior is to clear.
         }
       });
     }
   };
 
-  const code = isSource ? sourceCode : outputCode;
+  const code = type === 'source' ? sourceCode : outputCode;
+  const setCode = type === 'source' ? setSourceCode : setOutputCode;
+  const isSource = type === 'source';
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shadow-xl">
@@ -49,23 +48,23 @@ export function SchemaEditor({
           <FileCode2 size={16} className={isSource ? "text-indigo-400" : "text-emerald-400"} />
           <span className="text-sm font-semibold tracking-wide">{title}</span>
         </div>
-        <button
+        <button 
           onClick={() => navigator.clipboard.writeText(code)}
           className="text-zinc-500 hover:text-zinc-300 transition-colors"
         >
           <Copy size={14} />
         </button>
       </div>
-      <div className="flex-1 relative group">
+      <div className="flex-1 relative group bg-zinc-900">
         <Editor
           height="100%"
           defaultLanguage="sql"
           value={code}
-          onChange={(val) => isSource && setSourceCode(val || "")}
+          onChange={(val) => setCode(val || "")}
           theme="vs-dark"
           onMount={handleEditorDidMount}
           options={{
-            readOnly: !isSource,
+            readOnly: !interactive,
             minimap: { enabled: false },
             fontSize: 14,
             lineNumbers: "on",
@@ -77,9 +76,12 @@ export function SchemaEditor({
           }}
         />
         {/* Helper hint for selection */}
-        {isSource && (
-          <div className="absolute bottom-4 right-6 pointer-events-none opacity-0 group-hover:opacity-50 transition-opacity bg-black/50 text-white text-[10px] px-2 py-1 rounded">
-            Highlight code to ask agent
+        {interactive && (
+          <div className="absolute bottom-6 right-6 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+            <div className="bg-zinc-800/90 backdrop-blur border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+              Highlight to ask agent
+            </div>
           </div>
         )}
       </div>

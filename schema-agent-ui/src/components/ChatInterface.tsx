@@ -19,13 +19,13 @@ export function ChatInterface() {
   const handleSend = () => {
     if (!input.trim()) return;
 
-    const contextPrefix = selection
-      ? `[Regarding selection lines ${selection.startLine}-${selection.endLine}]: \n`
+    const contextPrefix = selection 
+      ? `[Regarding ${selection.source === 'source' ? 'Source' : 'Output'} selection lines ${selection.startLine}-${selection.endLine}]: \n` 
       : "";
 
     const userMsg: Message = {
       id: Date.now().toString(),
-      role: 'user',
+      role: 'user', 
       content: contextPrefix + input,
     };
 
@@ -40,20 +40,37 @@ export function ChatInterface() {
       const isFixRequest = input.toLowerCase().includes("fix") || input.toLowerCase().includes("pk") || input.toLowerCase().includes("primary key");
 
       if (isFixRequest) {
-        addMessage({
-          id: (Date.now() + 1).toString(),
-          role: 'agent',
-          content: "I noticed the Primary Key is 'SERIAL' which is an anti-pattern in Spanner (hotspotting). applying UUIDs is better.",
-          suggestedFix: {
-            description: "Replace SERIAL with UUID (STRING(36))",
-            target: 'source',
-            newCode: `CREATE TABLE users (
+        if (selection?.source === 'output') {
+          addMessage({
+            id: (Date.now() + 1).toString(),
+            role: 'agent',
+            content: "I see you selected the Spanner Output. I can optimize the Primary Key definition directly here.",
+            suggestedFix: {
+              description: "Optimize Primary Key in Spanner DDL",
+              target: 'output',
+              newCode: `CREATE TABLE Users (
+  Id STRING(36) NOT NULL,
+  Username STRING(50) NOT NULL,
+  CreatedAt TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
+) PRIMARY KEY (Id);` // Just an example, same code for now or slightly tweaked
+            }
+          });
+        } else {
+           addMessage({
+             id: (Date.now() + 1).toString(),
+             role: 'agent',
+             content: "I noticed the Primary Key is 'SERIAL' which is an anti-pattern in Spanner (hotspotting). applying UUIDs is better.",
+             suggestedFix: {
+               description: "Replace SERIAL with UUID (STRING(36))",
+               target: 'source',
+               newCode: `CREATE TABLE users (
   id VARCHAR(36) NOT NULL PRIMARY KEY, -- Changed to UUID for Spanner
   username VARCHAR(50) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );`
-          }
-        });
+               }
+             });
+         }
       } else {
         addMessage({
           id: (Date.now() + 1).toString(),
@@ -66,11 +83,18 @@ export function ChatInterface() {
 
   const handleApplyFix = (fix: NonNullable<Message['suggestedFix']>) => {
     if (fix.target === 'source') {
-      setSourceCode(fix.newCode);
+      useStore.getState().setSourceCode(fix.newCode);
       addMessage({
         id: Date.now().toString(),
         role: 'agent',
         content: "Fix applied to Source Schema! 🚀"
+      });
+    } else if (fix.target === 'output') {
+      useStore.getState().setOutputCode(fix.newCode);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: "Fix applied to Spanner Output! 🚀"
       });
     }
   };

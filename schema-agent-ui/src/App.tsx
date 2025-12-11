@@ -33,7 +33,8 @@ function App() {
           <Panel defaultSize={30} minSize={20} className="flex flex-col">
             <SchemaEditor
               title="Source Schema (PostgreSQL)"
-              isSource={true}
+              type="source"
+              interactive={false} // User request: functionality needs to be in Spanner editor
             />
           </Panel>
 
@@ -45,6 +46,8 @@ function App() {
           <Panel defaultSize={40} minSize={20}>
             <SchemaEditor
               title="Cloud Spanner DDL"
+              type="output"
+              interactive={true}
             />
           </Panel>
 
