@@ -80,25 +80,25 @@ CREATE TABLE Users(
               headerActions={
                 <div className="flex items-center gap-2">
                   {/* Dialect Dropdown */}
-                  <div className="relative">
+                  <div className="relative z-50">
                     <button
                       onClick={() => setShowDialectDropdown(!showDialectDropdown)}
-                      className={`flex items - center gap - 2 px - 2.5 py - 1 rounded text - xs font - medium transition - all border ${sourceDialect
-                          ? "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-                          : "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 animate-pulse"
-                        } `}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${sourceDialect
+                          ? "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 hover:border-zinc-600"
+                          : "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.1)]"
+                        }`}
                     >
-                      {sourceDialect ? SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name : "Select Dialect"}
-                      <ChevronDown size={12} className={`transition - transform duration - 200 ${showDialectDropdown ? "rotate-180" : ""} `} />
+                      <span>{sourceDialect ? SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name : "Select Dialect"}</span>
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${showDialectDropdown ? "rotate-180" : ""}`} />
                     </button>
 
                     {showDialectDropdown && (
                       <>
                         <div
-                          className="fixed inset-0 z-40"
+                          className="fixed inset-0 z-40" 
                           onClick={() => setShowDialectDropdown(false)}
                         />
-                        <div className="absolute top-full mt-2 left-0 w-32 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl overflow-hidden z-50 flex flex-col py-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left">
+                        <div className="absolute top-full mt-2 left-0 w-40 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-1 animate-in fade-in zoom-in-95 duration-150 origin-top-left ring-1 ring-white/5">
                           {SOURCE_DIALECTS.map(dialect => (
                             <button
                               key={dialect.id}
@@ -106,11 +106,12 @@ CREATE TABLE Users(
                                 setSourceDialect(dialect.id);
                                 setShowDialectDropdown(false);
                               }}
-                              className={`text - left px - 3 py - 2 text - xs transition - colors ${sourceDialect === dialect.id
-                                  ? "bg-indigo-500/10 text-indigo-400 font-medium"
-                                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                              className={`text-left px-3 py-2.5 rounded-lg text-xs transition-all duration-150 flex items-center gap-2 ${sourceDialect === dialect.id
+                                  ? "bg-indigo-500/20 text-indigo-300 font-medium"
+                                  : "text-zinc-400 hover:bg-white/5 hover:text-zinc-200"
                                 }`}
                             >
+                              <div className={`w-1.5 h-1.5 rounded-full ${sourceDialect === dialect.id ? "bg-indigo-400" : "bg-transparent"}`} />
                               {dialect.name}
                             </button>
                           ))}
@@ -119,29 +120,29 @@ CREATE TABLE Users(
                     )}
                   </div>
 
-                  <div className="w-px h-3 bg-zinc-800 mx-1" />
+                  <div className="w-px h-4 bg-zinc-800 mx-2" />
 
                   <button
                     onClick={() => setIsSourceLocked(!isSourceLocked)}
-                    className={`flex items - center justify - center w - 6 h - 6 rounded transition - colors ${isSourceLocked
+                    className={`flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 ${isSourceLocked 
                         ? "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800" 
-                        : "text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20"
+                        : "text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 hover:shadow-[0_0_10px_rgba(99,102,241,0.15)]"
                       }`}
                     title={isSourceLocked ? "Unlock to edit" : "Lock to prevent edits"}
                   >
-                    {isSourceLocked ? <Lock size={12} /> : <Unlock size={12} />}
+                    {isSourceLocked ? <Lock size={14} /> : <Unlock size={14} />}
                   </button>
 
                   {sourceCode.trim() && (
                     <button
                       onClick={handleConvert}
                       disabled={!sourceDialect || isConverting}
-                      className={`flex items - center gap - 1.5 px - 3 py - 1 rounded - full text - xs font - medium shadow - lg transition - all duration - 300 ${sourceDialect
-                          ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20 hover:scale-105 active:scale-95 cursor-pointer"
-                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50"
-                        } ${isConverting ? "opacity-75 cursor-wait" : ""}`}
+                      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceDialect
+                          ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
+                          : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
+                        } ${isConverting ? "opacity-80 cursor-wait" : ""}`}
                     >
-                      <Wand2 size={12} className={isConverting ? "animate-spin" : ""} />
+                      <Wand2 size={14} className={isConverting ? "animate-spin" : ""} />
                       {isConverting ? "Converting..." : "Convert"}
                     </button>
                   )}
