@@ -104,15 +104,44 @@ class SchemaAgentService:
             "logs": logs
         }
 
-    async def chat(self, message: str) -> str:
+    async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> str:
         logger.info(f"Received chat message: {message[:50]}...")
+        
+        # Build Context-Aware Prompt
+        context_parts = []
+        if source_ddl:
+            context_parts.append(f"SOURCE_DDL:\n```sql\n{source_ddl}\n```")
+        if output_ddl:
+            context_parts.append(f"CURRENT_SPANNER_DDL:\n```sql\n{output_ddl}\n```")
+        
+        if selection:
+            sel_code = selection.get("code", "")
+            sel_source = selection.get("source", "unknown")
+            sel_lines = f"{selection.get('startLine')}-{selection.get('endLine')}"
+            context_parts.append(f"USER_SELECTION (from {sel_source} lines {sel_lines}):\n```sql\n{sel_code}\n```\nUser is specifically referring to this selection.")
+
+        system_context = "\n\n".join(context_parts)
+        full_prompt = f"""
+        {system_context}
+        
+        USER QUERY: {message}
+        
+        Answer the user's query based on the provided schema context.
+        If they ask for a fix, provide specific DDL snippets.
+        """
+
         # Simple stateless chat for now (or persistent via client.chats)
         from google import genai
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
         
-        # TODO: Persist chat object
-        chat = client.chats.create(model=self.model_name)
-        response = chat.send_message(message)
+        # TODO: Persist chat object properly
+        chat = client.chats.create(
+            model=self.model_name,
+            config=types.GenerateContentConfig(
+                system_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL."
+            )
+        )
+        response = chat.send_message(full_prompt)
         return response.text
 
     def _extract_sql(self, text: str) -> str:

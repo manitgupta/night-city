@@ -12,6 +12,9 @@ class ConversionResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    source_ddl: Optional[str] = None
+    output_ddl: Optional[str] = None
+    selection: Optional[Dict[str, Any]] = None  # {code, startLine, endLine, source}
 
 class ChatResponse(BaseModel):
     response: str

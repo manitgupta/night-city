@@ -32,7 +32,7 @@ export const api = {
         return response.json();
     },
 
-    async chat(message: string): Promise<string> {
+    async chat(message: string, sourceCode?: string, outputCode?: string, selection?: any): Promise<string> {
         const response = await fetch(`${API_BASE_URL}/chat`, {
             method: "POST",
             headers: {
@@ -40,6 +40,9 @@ export const api = {
             },
             body: JSON.stringify({
                 message: message,
+                source_ddl: sourceCode,
+                output_ddl: outputCode,
+                selection: selection
             }),
         });
 

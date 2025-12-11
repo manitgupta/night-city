@@ -9,7 +9,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 export function ChatInterface() {
-  const { messages, addMessage, isAgentTyping, setAgentTyping, selection } = useStore();
+  const { messages, addMessage, isAgentTyping, setAgentTyping, selection, sourceCode, outputCode } = useStore();
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -24,14 +24,13 @@ export function ChatInterface() {
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    const contextPrefix = selection 
-      ? `[Regarding ${selection.source === 'source' ? 'Source' : 'Output'} selection lines ${selection.startLine}-${selection.endLine}]: \n` 
-      : "";
-
+    // We no longer prefix the message with context since we send it structured
+    // But we can still keep the UI consistent with what the user sees
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user', 
-      content: contextPrefix + input,
+      content: input, // Clean content, context is hidden/structured
+      // We could optionally allow showing the context attachment in the UI message list if we updated the Message type
     };
 
     addMessage(userMsg);
@@ -39,7 +38,8 @@ export function ChatInterface() {
     setAgentTyping(true);
 
     try {
-      const responseText = await api.chat(input); // Send just 'input' or full context if enhanced later
+      // Pass full context to backend
+      const responseText = await api.chat(input, sourceCode, outputCode, selection);
 
       addMessage({
         id: (Date.now() + 1).toString(),

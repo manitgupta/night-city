@@ -43,7 +43,12 @@ async def convert_schema(request: ConversionRequest):
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     try:
-        response_text = await agent_service.chat(request.message)
+        response_text = await agent_service.chat(
+            request.message,
+            source_ddl=request.source_ddl,
+            output_ddl=request.output_ddl,
+            selection=request.selection
+        )
         return ChatResponse(response=response_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
