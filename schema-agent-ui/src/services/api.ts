@@ -10,6 +10,11 @@ export interface ChatResponse {
 
 const API_BASE_URL = "http://localhost:8001";
 
+export interface ValidationResponse {
+    valid: boolean;
+    errors: string[];
+}
+
 export const api = {
     async convertSchema(sourceDdl: string, sourceDialect: string, verify: boolean): Promise<ConversionResponse> {
         const response = await fetch(`${API_BASE_URL}/convert`, {
@@ -53,5 +58,24 @@ export const api = {
 
         const data: ChatResponse = await response.json();
         return data.response;
+    },
+
+    async validateSpannerDDL(ddl: string): Promise<ValidationResponse> {
+        const response = await fetch(`${API_BASE_URL}/validate`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                ddl: ddl,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Validation failed: ${response.statusText}`);
+        }
+
+        return response.json();
     }
 };

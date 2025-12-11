@@ -5,6 +5,7 @@ import logging
 import asyncio
 from typing import Optional, Dict, Any, List
 from google.cloud import spanner
+from google.api_core import exceptions
 
 logger = logging.getLogger(__name__)
 
