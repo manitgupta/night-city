@@ -170,7 +170,7 @@ export function SchemaEditor({
     return () => clearInterval(interval);
   }, [isLoading]);
 
-  const handleEditorDidMount: OnMount = (editor, monaco) => {
+  const handleEditorDidMount: OnMount = (editor) => {
     editorRef.current = editor;
 
     // Listen for selection changes to update context

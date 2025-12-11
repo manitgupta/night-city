@@ -1,0 +1,117 @@
+from typing import Optional
+
+def generate_cot_prompt(source_ddl: str, dialect: str) -> str:
+    """
+    Generates a Chain-of-Thought prompt for SQL conversion.
+    """
+    return f"""
+You are a Principal Database Engineer at Google Cloud, specialized in migrating legacy SQL schemas (MySQL, PostgreSQL, Oracle) to Google Cloud Spanner.
+Your goal is to produce a Spanner Schema that is:
+1.  **Correct**: Preserves data integrity and types.
+2.  **Optimized**: Follows Spanner best practices (avoiding hotspots, using interleaving).
+
+# INSTRUCTIONS
+Before generating the final DDL, you must perform a thorough analysis in your response.
+Follow this rigid step-by-step reasoning process:
+
+### STEP 1: ANALYZE SOURCE SCHEMA
+*   List all tables and their Primary Keys.
+*   Identify relationships (Foreign Keys).
+*   Identify high-risk patterns: 
+    *   `AUTO_INCREMENT` / `SERIAL` (Hotspot risk).
+    *   `TIMESTAMP` usage (Timezone considerations).
+    *   `TEXT` / `BLOB` (Size limits).
+
+### STEP 2: PLAN SPANNER SCHEMA
+*   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).
+*   **Primary Keys**: Replace sequential numeric IDs with `BIT_REVERSED_SEQUENCE` (if native support exists) or UUIDs (STRING(36)) to prevent hotspots.
+*   **Data Types**: Map types to Spanner equivalents (e.g., `VARCHAR` -> `STRING`, `DECIMAL` -> `NUMERIC`).
+*   **Indexes**: Suggest secondary indexes for frequently queried columns.
+
+### STEP 3: GENERATE SPANNER DDL
+*   Output the final clean DDL inside a ```sql block.
+*   Include comments explaining specific optimizations (e.g., "-- Using BIT_REVERSED_SEQUENCE to avoid hotspots").
+
+---
+
+# FEW-SHOT EXAMPLES
+
+## Example 1: Handling Auto-Increment (Hotspot Prevention)
+**Input Source (PostgreSQL)**:
+```sql
+CREATE TABLE Users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50)
+);
+```
+
+**Model Output**:
+### STEP 1: ANALYZE
+*   Table `Users` has `SERIAL` PK `id`. This is a monotonically increasing integer.
+*   **Risk**: In Spanner, sequential writes to a Primary Key cause "hotspots" because all writes go to the end of the key space (one server).
+
+### STEP 2: PLAN
+*   **Fix**: Use Spanner's `BIT_REVERSED_SEQUENCE` feature or a UUID. 
+*   **Decision**: Use `BIT_REVERSED_SEQUENCE` to keep integer compatibility but gain performance.
+
+### STEP 3: GENERATE SPANNER DDL
+```sql
+CREATE SEQUENCE UsersIdSeq OPTIONS (sequence_kind = 'bit_reversed_positive');
+
+CREATE TABLE Users (
+    id INT64 DEFAULT (GET_NEXT_SEQUENCE_VALUE(SEQUENCE UsersIdSeq)),
+    username STRING(50)
+) PRIMARY KEY (id);
+```
+
+## Example 2: Interleaving (Data Locality)
+**Input Source (MySQL)**:
+```sql
+CREATE TABLE Singers (
+    SingerId INT64 NOT NULL,
+    Name VARCHAR(100),
+    PRIMARY KEY (SingerId)
+);
+CREATE TABLE Albums (
+    SingerId INT64 NOT NULL,
+    AlbumId INT64 NOT NULL,
+    Title VARCHAR(100),
+    PRIMARY KEY (SingerId, AlbumId),
+    FOREIGN KEY (SingerId) REFERENCES Singers(SingerId)
+);
+```
+
+**Model Output**:
+### STEP 1: ANALYZE
+*   `Albums` has a composite PK starting with `SingerId`.
+*   Start of PK matches Parent PK. Strong candidate for Parent-Child relationship.
+
+### STEP 2: PLAN
+*   **Optimization**: Use `INTERLEAVE IN PARENT Singers` for `Albums`. This physically co-locates Album data with Singer data, speeding up joins and lookups by Singer.
+
+### STEP 3: GENERATE SPANNER DDL
+```sql
+CREATE TABLE Singers (
+    SingerId INT64 NOT NULL,
+    Name STRING(100),
+) PRIMARY KEY (SingerId);
+
+CREATE TABLE Albums (
+    SingerId INT64 NOT NULL,
+    AlbumId INT64 NOT NULL,
+    Title STRING(100),
+) PRIMARY KEY (SingerId, AlbumId),
+  INTERLEAVE IN PARENT Singers ON DELETE CASCADE;
+```
+
+---
+
+# CURRENT TASK
+**Source Dialect**: {dialect}
+**Source DDL**:
+```sql
+{source_ddl}
+```
+
+Begin your response with "### STEP 1: ANALYZE".
+"""

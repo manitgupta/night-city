@@ -10,33 +10,22 @@ from app.tools import SpannerVerificationTool
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+from app.prompts import generate_cot_prompt
+
+# ... (Logging config remains same)
+
 class SchemaAgentService:
     _instance = None
 
     def __init__(self):
         self.model_name = "gemini-3-pro-preview"
         # ADK Agent
-        # We can configure tools here. For now starting with basic agent.
-        # Tools will be added dynamically or at init.
         self.agent = Agent(
             name="SchemaAgent",
             model=self.model_name,
             static_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL.",
-            # tools=[...] # We will add MCP tools here
         )
-        
-        # In ADK, 'Agent' manages state via 'InvocationContext' if using 'run_async'.
-        # For simplified usage in this API service, we might need to manage session/context manually 
-        # or use ADK's native flow if we can persist the context object.
-        # For this MVP, we will treat each request as a new turn in a maintained history list
-        # BUT ADK agents are often designed to run a full flow.
-        
-        # We will use a simple in-memory CLI-like store for active chats for now to demonstrate "Pair Programming"
-        self.active_chats: Dict[str, Any] = {} # session_id -> history/context
-        
-        # Toolbox Client
-        self.toolbox_client = None 
-        # self.toolbox_client = ToolboxClient(...) # Initialize if server details known
+        self.active_chats: Dict[str, Any] = {}
 
     @classmethod
     def get_instance(cls):
@@ -50,20 +39,10 @@ class SchemaAgentService:
         """
         logs = []
         logger.info(f"Starting conversion for dialect: {dialect}, verify_ddl={verify_ddl}")
-        logger.info(f"Source DDL: {source_ddl[:50]}...")
         
-        # Initial Prompt
-        prompt = f"""
-        You are an expert Database Engineer. Convert this {dialect} DDL to Google Cloud Spanner DDL.
+        # Initial Prompt with CoT
+        prompt = generate_cot_prompt(source_ddl, dialect)
         
-        Source DDL:
-        ```sql
-        {source_ddl}
-        ```
-        """
-        
-        # Verifier is now initialized at module level or top of method if preferred, 
-        # but let's keep it simple.
         verifier = SpannerVerificationTool()
         
         current_ddl = ""
@@ -77,8 +56,16 @@ class SchemaAgentService:
             # Call Agent
             logger.info(f"Sending prompt to agent (Attempt {attempt})")
             response_text = await self.chat(prompt)
+            # Log the thought process briefly (or full debug)
             logger.info("Received response from agent")
-            current_ddl = self._extract_sql(response_text)
+            
+            extracted_ddl = self._extract_sql(response_text)
+            
+            if not extracted_ddl:
+                logs.append("Error: No SQL block found in agent response.")
+                break
+                
+            current_ddl = extracted_ddl
             
             if not verify_ddl:
                 logs.append("Verification skipped (user disabled).")
@@ -92,22 +79,27 @@ class SchemaAgentService:
             else:
                 errors = "\n".join(verification["errors"])
                 logs.append(f"Verification failed: {errors}")
+                # For retry, we give it the error and ask to fix
                 prompt = f"""
-                The generated DDL had the following errors:
+                The previous DDL had the following errors:
                 {errors}
                 
-                Please fix the DDL and provide the corrected version in a ```sql block.
+                Please fix the DDL based on your previous analysis. 
+                Provide the corrected version in a ```sql block.
                 """
         
         return {
             "converted_ddl": current_ddl,
-            "logs": logs
+            "logs": logs,
+            # We could optionally return the full "thoughts" if we wanted to show them in UI
+            # "full_response": response_text 
         }
 
     async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> str:
+        # Same chat logic, just ensuring imports are correct
+        # ... (keeping existing chat logic mostly as is, just ensuring prompt flow works)
         logger.info(f"Received chat message: {message[:50]}...")
         
-        # Build Context-Aware Prompt
         context_parts = []
         if source_ddl:
             context_parts.append(f"SOURCE_DDL:\n```sql\n{source_ddl}\n```")
@@ -125,16 +117,11 @@ class SchemaAgentService:
         {system_context}
         
         USER QUERY: {message}
-        
-        Answer the user's query based on the provided schema context.
-        If they ask for a fix, provide specific DDL snippets.
         """
 
-        # Simple stateless chat for now (or persistent via client.chats)
         from google import genai
         client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
         
-        # TODO: Persist chat object properly
         chat = client.chats.create(
             model=self.model_name,
             config=types.GenerateContentConfig(
@@ -145,11 +132,27 @@ class SchemaAgentService:
         return response.text
 
     def _extract_sql(self, text: str) -> str:
-        if "```sql" in text:
-            return text.split("```sql")[1].split("```")[0].strip()
-        if "```" in text:
-            return text.split("```")[1].split("```")[0].strip()
-        return text
+        """
+        Extracts SQL from markdown code blocks. 
+        Supports ```sql and ``` blocks.
+        Finds the LAST block if multiple exist (often the final result after reasoning),
+        OR the largest block.
+        For CoT, usually the last block is the final output.
+        """
+        import re
+        
+        # Regex for ```sql ... ``` or ``` ... ```
+        # Flags: dotall (dot matches newline)
+        matches = re.findall(r"```(?:sql)?\s*(.*?)```", text, re.DOTALL)
+        
+        if not matches:
+            return text.strip() # Fallback: return whole text if no blocks
+            
+        # Heuristic: Return the longest block, as it's likely the full DDL.
+        # Alternatively, prompt instructions say "Output the final clean DDL inside a ```sql block"
+        # usually at the end.
+        longest_match = max(matches, key=len)
+        return longest_match.strip()
 
 # Global instance
 agent_service = SchemaAgentService.get_instance()
