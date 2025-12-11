@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from google.adk import Agent
 from google.genai import types
 from toolbox_core import ToolboxClient
+from app.tools import SpannerVerificationTool
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -61,7 +62,8 @@ class SchemaAgentService:
         ```
         """
         
-        from app.tools import SpannerVerificationTool
+        # Verifier is now initialized at module level or top of method if preferred, 
+        # but let's keep it simple.
         verifier = SpannerVerificationTool()
         
         current_ddl = ""

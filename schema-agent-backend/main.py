@@ -36,3 +36,18 @@ async def chat(request: ChatRequest):
         return ChatResponse(response=response_text)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+from pydantic import BaseModel
+
+class ValidateRequest(BaseModel):
+    ddl: str
+
+@app.post("/validate")
+async def validate_ddl(request: ValidateRequest):
+    try:
+        from app.tools import SpannerVerificationTool
+        verifier = SpannerVerificationTool()
+        result = await verifier.verify_ddl(request.ddl)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

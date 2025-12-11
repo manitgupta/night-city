@@ -1,5 +1,7 @@
 schema-agent-ui/node_modules
 schema-agent-backend/venv
 schema-agent-backend/__pycache__/
+schema-agent-backend/app/__pycache__/
 schema-agent-backend/.env
 schema-agent-backend/server.log
+toolbox

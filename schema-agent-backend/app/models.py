@@ -1,18 +1,16 @@
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 class ConversionRequest(BaseModel):
     source_ddl: str
-    source_dialect: str  # e.g., 'mysql', 'postgres', 'oracle'
+    source_dialect: str
 
 class ConversionResponse(BaseModel):
     converted_ddl: str
-    logs: List[str] = []
-    error: Optional[str] = None
+    logs: List[str]
 
 class ChatRequest(BaseModel):
     message: str
 
 class ChatResponse(BaseModel):
     response: str
-    # We might add 'context_used' or debugging info here later
