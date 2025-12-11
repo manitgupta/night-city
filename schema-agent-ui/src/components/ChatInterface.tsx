@@ -169,15 +169,26 @@ export function ChatInterface() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4 bg-zinc-950 border-t border-zinc-800">
+      <div className="relative p-4 bg-zinc-950 border-t border-zinc-800">
         {selection && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-xs text-indigo-300 flex items-center justify-between"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="absolute bottom-full left-0 mb-2 w-full px-4"
           >
-            <span className="truncate max-w-[200px]">Context: {selection.code.substring(0, 30)}...</span>
-            <button onClick={() => useStore.getState().setSelection(null)} className="hover:text-white">✕</button>
+            <div className="flex items-center justify-between text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 px-3 py-2 rounded-lg backdrop-blur-md">
+              <span className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                Active Selection: <b>{selection.source === 'source' ? 'Source' : 'Spanner'} Lines {selection.startLine}-{selection.endLine}</b>
+              </span>
+              <button
+                onClick={() => useStore.getState().setSelection(null)}
+                className="hover:bg-indigo-500/20 p-1 rounded transition-colors"
+                title="Clear Selection"
+              >
+                ✕
+              </button>
+            </div>
           </motion.div>
         )}
         <div className="relative">

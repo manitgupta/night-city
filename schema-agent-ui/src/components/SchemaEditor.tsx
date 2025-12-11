@@ -126,9 +126,41 @@ export function SchemaEditor({
   headerActions,
   isLoading = false
 }: SchemaEditorProps) {
-  const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection } = useStore();
+  const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection, selection } = useStore();
   const editorRef = useRef<any>(null);
+  const decorationsRef = useRef<string[]>([]);
   const [loadingTextIndex, setLoadingTextIndex] = React.useState(0);
+
+  // Sync decoration with global selection state
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !editor.getModel()) return;
+
+    // Check if this editor holds the active selection
+    const isThisEditorSelected = selection && selection.source === type;
+
+    if (isThisEditorSelected && selection) {
+      // Highlight the global selection
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [
+        {
+          range: new (window as any).monaco.Range(
+            selection.startLine,
+            1,
+            selection.endLine,
+            1000
+          ),
+          options: {
+            isWholeLine: true,
+            className: 'bg-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.15)] border-l-2 border-indigo-500',
+            glyphMarginClassName: 'bg-indigo-500/50 w-2',
+          },
+        },
+      ]);
+    } else {
+      // Clear decorations if no selection or selection is elsewhere
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, []);
+    }
+  }, [selection, type]);
 
   React.useEffect(() => {
     if (!isLoading) return;
