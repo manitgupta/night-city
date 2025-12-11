@@ -1,4 +1,4 @@
-# Schema Conversion Agent UI
+# Night City: Spanner schema converter
 
 A slick, dark-mode "pair programming" interface for converting SQL schemas to Cloud Spanner.
 

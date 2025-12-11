@@ -55,7 +55,7 @@ CREATE TABLE Users(
             <Database size={18} className="text-white" />
           </div>
           <h1 className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400">
-            Schema Conversion Agent
+            Night City: Spanner Schema Converter
           </h1>
         </div>
         <div className="flex items-center gap-4 text-sm font-medium text-zinc-500">
