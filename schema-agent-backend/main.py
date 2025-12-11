@@ -4,7 +4,14 @@ from dotenv import load_dotenv
 from app.agent import agent_service
 from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse
 
-load_dotenv()
+import os
+from pathlib import Path
+
+# Load .env from current directory or parent directory
+env_path = Path('.') / '.env'
+if not env_path.exists():
+    env_path = Path('..') / '.env'
+load_dotenv(dotenv_path=env_path)
 
 app = FastAPI()
 

@@ -19,6 +19,11 @@ A slick, dark-mode "pair programming" interface for converting SQL schemas to Cl
 - **Targeted Fixes**: Can apply fixes to **Source** (e.g. `SERIAL` -> `UUID`) or **Output** (e.g. optimizing Spanner DDL directly).
 - **One-Click Apply**: Clicking "Apply Fix" updates the respective editor.
 
+### 4. Real-time Verification
+- **Spanner Verification**: Optional "Enable verification?" toggle in the Output editor.
+- **Validation Loop**: When enabled, the DDL is validated against a real Spanner instance to catch complex issues.
+- **Feedback**: Provides a slick loading overlay with status updates during the verification process.
+
 ## Visuals
 
 ### Editor Workflow
