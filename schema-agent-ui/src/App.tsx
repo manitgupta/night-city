@@ -3,15 +3,25 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
 import { useState } from "react";
-import { Database, Lock, Unlock, ArrowRight, Wand2 } from "lucide-react";
+import { Database, Lock, Unlock, ArrowRight, Wand2, ChevronDown } from "lucide-react";
 import { useStore } from "./store";
 
+const SOURCE_DIALECTS = [
+  { id: 'mysql', name: 'MySQL' },
+  { id: 'postgres', name: 'PostgreSQL' },
+  { id: 'oracle', name: 'Oracle' }
+];
+
 function App() {
-  const [isSourceLocked, setIsSourceLocked] = useState(true);
+  const [isSourceLocked, setIsSourceLocked] = useState(false); // Default to unlocked so user can paste
   const [isConverting, setIsConverting] = useState(false);
+  const [showDialectDropdown, setShowDialectDropdown] = useState(false);
+  const [sourceDialect, setSourceDialect] = useState<string | null>(null);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode } = useStore();
 
   const handleConvert = () => {
+    if (!sourceDialect) return;
+
     setIsConverting(true);
     setAgentTyping(true);
     setIsSourceLocked(true); // Auto-lock on convert
@@ -20,8 +30,8 @@ function App() {
     setTimeout(() => {
       setIsConverting(false);
       setAgentTyping(false);
-      setOutputCode(`-- Converted from PostgreSQL
-CREATE TABLE Users(
+      setOutputCode(`-- Converted from ${SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name }
+CREATE TABLE Users( 
   Id STRING(36) NOT NULL,
   Username STRING(50) NOT NULL,
   CreatedAt TIMESTAMP NOT NULL OPTIONS(allow_commit_timestamp = true),
@@ -63,30 +73,76 @@ CREATE TABLE Users(
           {/* Left Panel: Source */}
           <Panel defaultSize={30} minSize={20} className="flex flex-col">
             <SchemaEditor
-              title="Source Schema (PostgreSQL)" 
+              title={sourceDialect ? `Source Schema(${SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name})` : "Source Schema"}
               type="source"
               readOnly={isSourceLocked}
               showHint={true}
               headerActions={
                 <div className="flex items-center gap-2">
+                  {/* Dialect Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDialectDropdown(!showDialectDropdown)}
+                      className={`flex items - center gap - 2 px - 2.5 py - 1 rounded text - xs font - medium transition - all border ${sourceDialect
+                          ? "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                          : "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 animate-pulse"
+                        } `}
+                    >
+                      {sourceDialect ? SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name : "Select Dialect"}
+                      <ChevronDown size={12} className={`transition - transform duration - 200 ${showDialectDropdown ? "rotate-180" : ""} `} />
+                    </button>
+
+                    {showDialectDropdown && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowDialectDropdown(false)}
+                        />
+                        <div className="absolute top-full mt-2 left-0 w-32 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl overflow-hidden z-50 flex flex-col py-1 animate-in fade-in zoom-in-95 duration-100 origin-top-left">
+                          {SOURCE_DIALECTS.map(dialect => (
+                            <button
+                              key={dialect.id}
+                              onClick={() => {
+                                setSourceDialect(dialect.id);
+                                setShowDialectDropdown(false);
+                              }}
+                              className={`text - left px - 3 py - 2 text - xs transition - colors ${sourceDialect === dialect.id
+                                  ? "bg-indigo-500/10 text-indigo-400 font-medium"
+                                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                                }`}
+                            >
+                              {dialect.name}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="w-px h-3 bg-zinc-800 mx-1" />
+
                   <button
                     onClick={() => setIsSourceLocked(!isSourceLocked)}
-                    className={`flex items - center gap - 1.5 px - 2 py - 1 rounded text - xs font - medium transition - colors ${isSourceLocked
-                        ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                    className={`flex items - center justify - center w - 6 h - 6 rounded transition - colors ${isSourceLocked
+                        ? "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800" 
                         : "text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20"
                       }`}
+                    title={isSourceLocked ? "Unlock to edit" : "Lock to prevent edits"}
                   >
                     {isSourceLocked ? <Lock size={12} /> : <Unlock size={12} />}
-                    {isSourceLocked ? "Locked" : "Unlocked"}
                   </button>
 
-                  {!isConverting && sourceCode.trim() && (
+                  {sourceCode.trim() && (
                     <button
                       onClick={handleConvert}
-                      className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-lg shadow-indigo-500/20 transition-all hover:scale-105 active:scale-95 animate-in fade-in zoom-in duration-300"
+                      disabled={!sourceDialect || isConverting}
+                      className={`flex items - center gap - 1.5 px - 3 py - 1 rounded - full text - xs font - medium shadow - lg transition - all duration - 300 ${sourceDialect
+                          ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20 hover:scale-105 active:scale-95 cursor-pointer"
+                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50"
+                        } ${isConverting ? "opacity-75 cursor-wait" : ""}`}
                     >
-                      <Wand2 size={12} />
-                      Convert
+                      <Wand2 size={12} className={isConverting ? "animate-spin" : ""} />
+                      {isConverting ? "Converting..." : "Convert"}
                     </button>
                   )}
                 </div>
