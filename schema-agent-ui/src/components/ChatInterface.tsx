@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, Code2, Check, ArrowRight } from "lucide-react";
+import { Send, Bot, User, Sparkles, Code2, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, Message } from "../store";
+import { api } from "../services/api";
 
 export function ChatInterface() {
   const { messages, addMessage, isAgentTyping, setAgentTyping, selection, setSourceCode } = useStore();
@@ -16,7 +17,7 @@ export function ChatInterface() {
     scrollToBottom();
   }, [messages, isAgentTyping]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
     const contextPrefix = selection 
@@ -33,52 +34,28 @@ export function ChatInterface() {
     setInput("");
     setAgentTyping(true);
 
-    // Simulate Agent Response
-    setTimeout(() => {
+    try {
+      const responseText = await api.chat(input); // Send just 'input' or full context if enhanced later
+
+      addMessage({
+        id: (Date.now() + 1).toString(),
+        role: 'agent',
+        content: responseText
+      });
+
+      // We can add logic here to parse 'suggestedFix' from response if the Agent returns structured data
+      // For now, the backend returns raw text, so we display it directly.
+
+    } catch (error) {
+      console.error("Chat error:", error);
+      addMessage({
+        id: (Date.now() + 1).toString(),
+        role: 'agent',
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : "Unknown error"}`
+      });
+    } finally {
       setAgentTyping(false);
-
-      const isFixRequest = input.toLowerCase().includes("fix") || input.toLowerCase().includes("pk") || input.toLowerCase().includes("primary key");
-
-      if (isFixRequest) {
-        if (selection?.source === 'output') {
-          addMessage({
-            id: (Date.now() + 1).toString(),
-            role: 'agent',
-            content: "I see you selected the Spanner Output. I can optimize the Primary Key definition directly here.",
-            suggestedFix: {
-              description: "Optimize Primary Key in Spanner DDL",
-              target: 'output',
-              newCode: `CREATE TABLE Users (
-  Id STRING(36) NOT NULL,
-  Username STRING(50) NOT NULL,
-  CreatedAt TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
-) PRIMARY KEY (Id);` // Just an example, same code for now or slightly tweaked
-            }
-          });
-        } else {
-           addMessage({
-             id: (Date.now() + 1).toString(),
-             role: 'agent',
-             content: "I noticed the Primary Key is 'SERIAL' which is an anti-pattern in Spanner (hotspotting). applying UUIDs is better.",
-             suggestedFix: {
-               description: "Replace SERIAL with UUID (STRING(36))",
-               target: 'source',
-               newCode: `CREATE TABLE users (
-  id VARCHAR(36) NOT NULL PRIMARY KEY, -- Changed to UUID for Spanner
-  username VARCHAR(50) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);`
-               }
-             });
-         }
-      } else {
-        addMessage({
-          id: (Date.now() + 1).toString(),
-          role: 'agent',
-          content: "I see. How specifically would you like to handle this constraint? Spanner supports interleaved tables if you want to optimize for locality."
-        });
-      }
-    }, 1500);
+    }
   };
 
   const handleApplyFix = (fix: NonNullable<Message['suggestedFix']>) => {

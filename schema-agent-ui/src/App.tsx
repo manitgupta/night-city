@@ -3,8 +3,9 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
 import { useState } from "react";
-import { Database, Lock, Unlock, ArrowRight, Wand2, ChevronDown } from "lucide-react";
+import { Database, Lock, Unlock, Wand2, ChevronDown } from "lucide-react";
 import { useStore } from "./store";
+import { api } from "./services/api";
 
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
@@ -19,31 +20,37 @@ function App() {
   const [sourceDialect, setSourceDialect] = useState<string | null>(null);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode } = useStore();
 
-  const handleConvert = () => {
+  const handleConvert = async () => {
     if (!sourceDialect) return;
 
     setIsConverting(true);
     setAgentTyping(true);
     setIsSourceLocked(true); // Auto-lock on convert
 
-    // Simulate conversion delay
-    setTimeout(() => {
-      setIsConverting(false);
-      setAgentTyping(false);
-      setOutputCode(`-- Converted from ${SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name }
-CREATE TABLE Users( 
-  Id STRING(36) NOT NULL,
-  Username STRING(50) NOT NULL,
-  CreatedAt TIMESTAMP NOT NULL OPTIONS(allow_commit_timestamp = true),
-) PRIMARY KEY(Id);
+    try {
+      const result = await api.convertSchema(sourceCode, sourceDialect);
+      setOutputCode(result.converted_ddl);
 
---Note: SERIAL was converted to STRING(36)(UUID) as per Spanner best practices.`);
+      const logsSummary = result.logs.length > 0
+        ? "\n\nLogs:\n" + result.logs.join("\n")
+        : "";
+
       addMessage({
         id: Date.now().toString(),
         role: 'agent',
-        content: "I've converted your schema to Google Cloud Spanner DDL! I applied best practices for Primary Keys and Timestamps. You can check the Diff View now."
+        content: `Conversion complete! ${logsSummary}`
       });
-    }, 2000);
+    } catch (error) {
+      console.error("Conversion error:", error);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: `Error converting schema: ${error instanceof Error ? error.message : "Unknown error"}`
+      });
+    } finally {
+      setIsConverting(false);
+      setAgentTyping(false);
+    }
   };
 
   return (
