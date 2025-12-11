@@ -6,13 +6,17 @@ import { useStore } from "../store";
 interface SchemaEditorProps {
   title: string;
   type: 'source' | 'output';
-  interactive?: boolean;
+  showHint?: boolean;
+  readOnly?: boolean;
+  headerActions?: React.ReactNode;
 }
 
 export function SchemaEditor({ 
   title,
   type,
-  interactive = false
+  showHint = false,
+  readOnly = false,
+  headerActions
 }: SchemaEditorProps) {
   const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection } = useStore();
   const editorRef = useRef<any>(null);
@@ -20,21 +24,20 @@ export function SchemaEditor({
   const handleEditorDidMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
 
-    if (interactive) {
-      editor.onDidChangeCursorSelection((e: any) => {
-        const selection = e.selection;
-        const model = editor.getModel();
-        if (selection && !selection.isEmpty() && model) {
-          const content = model.getValueInRange(selection);
-          setSelection({
-            code: content,
-            startLine: selection.startLineNumber,
-            endLine: selection.endLineNumber,
-            source: type
-          });
-        }
-      });
-    }
+    // Listen for selection changes to update context
+    editor.onDidChangeCursorSelection((e: any) => {
+      const selection = e.selection;
+      const model = editor.getModel();
+      if (selection && !selection.isEmpty() && model) {
+        const content = model.getValueInRange(selection);
+        setSelection({
+          code: content,
+          startLine: selection.startLineNumber,
+          endLine: selection.endLineNumber,
+          source: type
+        });
+      }
+    });
   };
 
   const code = type === 'source' ? sourceCode : outputCode;
@@ -48,12 +51,17 @@ export function SchemaEditor({
           <FileCode2 size={16} className={isSource ? "text-indigo-400" : "text-emerald-400"} />
           <span className="text-sm font-semibold tracking-wide">{title}</span>
         </div>
-        <button 
-          onClick={() => navigator.clipboard.writeText(code)}
-          className="text-zinc-500 hover:text-zinc-300 transition-colors"
-        >
-          <Copy size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          {headerActions}
+          <div className="w-px h-4 bg-zinc-800 mx-1" />
+          <button
+            onClick={() => navigator.clipboard.writeText(code)}
+            className="text-zinc-500 hover:text-zinc-300 transition-colors p-1 hover:bg-zinc-800 rounded"
+            title="Copy to clipboard"
+          >
+            <Copy size={14} />
+          </button>
+        </div>
       </div>
       <div className="flex-1 relative group bg-zinc-900">
         <Editor
@@ -64,7 +72,7 @@ export function SchemaEditor({
           theme="vs-dark"
           onMount={handleEditorDidMount}
           options={{
-            readOnly: !interactive,
+            readOnly,
             minimap: { enabled: false },
             fontSize: 14,
             lineNumbers: "on",
@@ -76,7 +84,7 @@ export function SchemaEditor({
           }}
         />
         {/* Helper hint for selection */}
-        {interactive && (
+        {showHint && (
           <div className="absolute bottom-6 right-6 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
             <div className="bg-zinc-800/90 backdrop-blur border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
