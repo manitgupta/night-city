@@ -1,0 +1,3 @@
+schema-agent-ui/node_modules
+schema-agent-backend/venv
+schema-agent-backend/__pycache__/
