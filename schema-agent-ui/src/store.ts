@@ -32,16 +32,8 @@ interface AppState {
 }
 
 export const useStore = create<AppState>((set) => ({
-  sourceCode: `CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
-  username VARCHAR(50) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);`,
-  outputCode: `CREATE TABLE Users (
-  Id STRING(36) NOT NULL,
-  Username STRING(50) NOT NULL,
-  CreatedAt TIMESTAMP NOT NULL OPTIONS (allow_commit_timestamp=true),
-) PRIMARY KEY (Id);`,
+  sourceCode: "",
+  outputCode: "",
   selection: null,
   messages: [
     {
