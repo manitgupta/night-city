@@ -1,8 +1,9 @@
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
-import { useState } from "react";
-import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
+import { MigrateDialog } from "./components/MigrateDialog";
+import { useState, useEffect } from "react";
+import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight, Eye, ThumbsUp, ThumbsDown, Rocket } from "lucide-react";
 import { useStore } from "./store";
 import { api, AnalyzeResponse } from "./services/api";
 
@@ -24,7 +25,16 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [originalOutputCode, setOriginalOutputCode] = useState<string>("");
+  const [showMigrateDialog, setShowMigrateDialog] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationResult, setMigrationResult] = useState<{ success: boolean; database_uri: string; message: string; } | null>(null);
+  const [showValidationModal, setShowValidationModal] = useState(false);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode } = useStore();
+
+  // Invalidate validation result when output code changes
+  useEffect(() => {
+    setValidationResult(null);
+  }, [outputCode]);
 
   const handleValidate = async () => {
     if (!outputCode.trim()) return;
@@ -33,6 +43,7 @@ function App() {
     try {
       const result = await api.validateSpannerDDL(outputCode);
       setValidationResult(result);
+      setShowValidationModal(true);
     } catch (error) {
       console.error("Validation error:", error);
       setValidationResult({ valid: false, errors: [error instanceof Error ? error.message : "Unknown error"] });
@@ -45,7 +56,7 @@ function App() {
     if (isReviewing) return; // Prevent closing validation modal during review if we want to force a choice, or allow cancel. 
     // Let's allow cancel but reset review state
     setIsReviewing(false);
-    setValidationResult(null);
+    setShowValidationModal(false);
     setAnalysisResult(null);
   };
 
@@ -89,6 +100,48 @@ function App() {
     setAnalysisResult(null);
   };
 
+  const handleMigrate = async (projectId: string, instanceId: string, databaseId: string) => {
+    setIsMigrating(true);
+    setAgentTyping(true);
+    setMigrationResult(null);
+    try {
+      const result = await api.migrateSchema(projectId, instanceId, databaseId, outputCode);
+      if (result.success) {
+        setMigrationResult({
+          success: true,
+          database_uri: result.database_uri,
+          message: result.message
+        });
+        // Don't close dialog, let user see success state
+        addMessage({
+          id: Date.now().toString(),
+          role: 'agent',
+          content: `✅ Migration Successful! \n\nDatabase created at: \`${result.database_uri}\``
+        });
+      } else {
+        // Show error but keep dialog open? Or close and show in chat?
+        // Let's show in chat and keep dialog open so they can retry if it's a typo
+        addMessage({
+          id: Date.now().toString(),
+          role: 'agent',
+          content: `❌ Migration Failed: ${result.message}`
+        });
+        // We could also show an alert in the dialog itself if we passed setError prop, 
+        // but for now chat feedback is good.
+      }
+    } catch (error) {
+      console.error("Migration error:", error);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: `❌ Migration Error: ${error instanceof Error ? error.message : "Unknown error"}`
+      });
+    } finally {
+      setIsMigrating(false);
+      setAgentTyping(false);
+    }
+  };
+
   const handleConvert = async () => {
     if (!sourceDialect) return;
 
@@ -124,8 +177,18 @@ function App() {
 
   return (
     <div className="h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col font-sans selection:bg-indigo-500/30 relative">
+      <MigrateDialog
+        isOpen={showMigrateDialog}
+        onClose={() => {
+          setShowMigrateDialog(false);
+          setMigrationResult(null); // Reset on close
+        }}
+        onMigrate={handleMigrate}
+        isMigrating={isMigrating}
+        migrationResult={migrationResult}
+      />
       {/* Validation Modal Overlay (Hidden when Reviewing) */}
-      {validationResult && !isReviewing && (
+      {validationResult && showValidationModal && !isReviewing && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           {/* If Reviewing, show a smaller top-center modal or floating action bar? 
               Actually, user said 'Accept/Reject button shows up along with the diff view'.
@@ -444,6 +507,19 @@ function App() {
                     )}
                     Validate
                   </button>
+
+                      {validationResult?.valid && !isConverting && (
+                        <>
+                          <div className="w-px h-4 bg-zinc-800 mx-2" />
+                          <button
+                            onClick={() => setShowMigrateDialog(true)}
+                            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md shadow-lg shadow-indigo-500/20 transition-all animate-in fade-in slide-in-from-right-4"
+                          >
+                            <Rocket size={12} />
+                            Migrate
+                          </button>
+                        </>
+                      )}
                 </div>
                   )
               }

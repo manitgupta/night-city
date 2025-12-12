@@ -15,6 +15,12 @@ export interface ValidationResponse {
     errors: string[];
 }
 
+export interface MigrateResponse {
+    success: boolean;
+    message: string;
+    database_uri: string;
+}
+
 export const api = {
     async convertSchema(sourceDdl: string, sourceDialect: string, verify: boolean): Promise<ConversionResponse> {
         const response = await fetch(`${API_BASE_URL}/convert`, {
@@ -95,6 +101,28 @@ export const api = {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
             throw new Error(errorData.detail || `Analysis failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async migrateSchema(projectId: string, instanceId: string, databaseId: string, ddl: string): Promise<MigrateResponse> {
+        const response = await fetch(`${API_BASE_URL}/migrate`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                project_id: projectId,
+                instance_id: instanceId,
+                database_id: databaseId,
+                ddl: ddl,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Migration failed: ${response.statusText}`);
         }
 
         return response.json();

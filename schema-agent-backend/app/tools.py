@@ -103,3 +103,72 @@ class SpannerVerificationTool:
                 pass # It wasn't created, perfectly fine
             except Exception as drop_error:
                 logger.error(f"Failed to drop temp database {database_id}: {drop_error}")
+
+
+class SpannerMigrationTool:
+    def __init__(self):
+        """
+        Initializes the SpannerMigrationTool.
+        The client is initialized per request to allow different projects/instances.
+        """
+        pass
+
+    async def migrate_database(self, project_id: str, instance_id: str, database_id: str, ddl: str) -> Dict[str, Any]:
+        """
+        Creates a database in the specified Spanner instance and applies the DDL.
+        Returns a dictionary with 'success': bool, 'message': str, 'database_uri': str.
+        """
+        logger.info(f"Starting migration to projects/{project_id}/instances/{instance_id}/databases/{database_id}")
+        
+        loop = asyncio.get_running_loop()
+        
+        try:
+            ddl_statements = [stmt.strip() for stmt in ddl.split(";") if stmt.strip()]
+            
+            if not ddl_statements:
+                 return {"success": False, "message": "No DDL statements found."}
+
+            # Run creation in thread pool
+            await loop.run_in_executor(
+                None, 
+                self._create_database, 
+                project_id, 
+                instance_id, 
+                database_id, 
+                ddl_statements
+            )
+            
+            database_uri = f"projects/{project_id}/instances/{instance_id}/databases/{database_id}"
+            return {
+                "success": True, 
+                "message": "Database created and schema applied successfully.",
+                "database_uri": database_uri
+            }
+
+        except exceptions.AlreadyExists:
+            return {"success": False, "message": f"Database '{database_id}' already exists."}
+        except exceptions.PermissionDenied:
+             return {"success": False, "message": "Permission denied. Please check if the service account has permission to create databases."}
+        except exceptions.InvalidArgument as e:
+            return {"success": False, "message": f"Invalid argument (possibly DDL syntax): {str(e)}"}
+        except exceptions.GoogleAPICallError as e:
+            return {"success": False, "message": f"Spanner API Error: {e.message}"}
+        except Exception as e:
+            logger.error(f"Unexpected error during migration: {e}")
+            return {"success": False, "message": f"Unexpected Error: {str(e)}"}
+
+    def _create_database(self, project_id: str, instance_id: str, database_id: str, ddl_statements: List[str]):
+        """
+        Synchronous helper to create the database.
+        """
+        try:
+            client = spanner.Client(project=project_id)
+            instance = client.instance(instance_id)
+            database = instance.database(database_id, ddl_statements=ddl_statements)
+            
+            operation = database.create()
+            operation.result(timeout=600)  # 10 minutes timeout for actual creation
+            logger.info(f"Database {database_id} created successfully.")
+            
+        except Exception as e:
+            raise e

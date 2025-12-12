@@ -58,6 +58,17 @@ from pydantic import BaseModel
 class ValidateRequest(BaseModel):
     ddl: str
 
+class MigrateRequest(BaseModel):
+    project_id: str
+    instance_id: str
+    database_id: str
+    ddl: str
+
+class MigrateResponse(BaseModel):
+    success: bool
+    message: str
+    database_uri: str = ""
+
 @app.post("/validate")
 async def validate_ddl(request: ValidateRequest):
     try:
@@ -77,5 +88,20 @@ async def analyze_error(request: AnalyzeRequest):
             request.error_message
         )
         return AnalyzeResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/migrate", response_model=MigrateResponse)
+async def migrate_database(request: MigrateRequest):
+    try:
+        from app.tools import SpannerMigrationTool
+        tool = SpannerMigrationTool()
+        result = await tool.migrate_database(
+            request.project_id,
+            request.instance_id,
+            request.database_id,
+            request.ddl
+        )
+        return MigrateResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
