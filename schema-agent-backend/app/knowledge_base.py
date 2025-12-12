@@ -138,7 +138,7 @@ MAPPING_RULES_KNOWLEDGE_BASE = {
     ],
     "MySQL": [
         {"source_type": "TINYINT / SMALLINT / INT / BIGINT", "spanner_type": "INT64", "note": "All integers map to INT64."},
-        {"source_type": "AUTO_INCREMENT", "spanner_type": "INT64", "note": "Use BIT_REVERSED_SEQUENCE or UUID to avoid hotspots."},
+        {"source_type": "AUTO_INCREMENT", "spanner_type": "INT64 NOT NULL", "note": "Use BIT_REVERSED_SEQUENCE or UUID to avoid hotspots. CRITICAL: PKs must be NOT NULL."},
         {"source_type": "TEXT / LONGTEXT", "spanner_type": "STRING(MAX)", "note": ""},
         {"source_type": "VARCHAR(n)", "spanner_type": "STRING(n)", "note": ""},
         {"source_type": "DECIMAL", "spanner_type": "NUMERIC", "note": "Check precision limits (38,9)."},
