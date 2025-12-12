@@ -5,6 +5,7 @@ export interface Message {
   role: 'user' | 'agent';
   content: string;
   isApplying?: boolean; // If agent is suggesting a fix
+  isReport?: boolean; // If this message is a conversion report
   suggestedFix?: {
     description: string;
     newCode: string;

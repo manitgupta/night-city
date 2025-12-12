@@ -9,6 +9,7 @@ class ConversionRequest(BaseModel):
 class ConversionResponse(BaseModel):
     converted_ddl: str
     logs: List[str]
+    report: Optional[str] = None
 
 class ChatRequest(BaseModel):
     message: str

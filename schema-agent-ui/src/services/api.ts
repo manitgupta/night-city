@@ -2,6 +2,7 @@
 export interface ConversionResponse {
     converted_ddl: string;
     logs: string[];
+    report?: string;
 }
 
 export interface ChatResponse {

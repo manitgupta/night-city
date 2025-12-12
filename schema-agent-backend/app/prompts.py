@@ -29,8 +29,23 @@ Follow this rigid step-by-step reasoning process:
 
 {hints}
 
+### STEP 3: GENERATE CONVERSION REPORT
+Create a **Markdown** report summarizing the conversion. This report will be shown to the user.
+Use the following format:
 
-### STEP 3: GENERATE SPANNER DDL
+## Conversion Report
+### ✅ Successfully Converted
+*   List tables/objects that were directly mapped.
+
+### ⚠️ Partially Converted
+*   List objects that required significant changes or had features stripped (e.g., `FULLTEXT` indexes, Stored Procedures).
+*   Explain WHY they were modified.
+
+### 🚫 Ignored / Unsupported
+*   List features that were completely ignored (e.g., `Foreign Keys` if not enforced, `Triggers`, `Views` if complex).
+*   Explain why they are not supported in Spanner.
+
+### STEP 4: GENERATE SPANNER DDL
 *   Output the final clean DDL inside a ```sql block.
 *   **CRITICAL**: Do NOT include any comments (starting with `--` or `/*`) inside the SQL block. Spanner DDL does not support them and validation will fail.
 *   All explanations must be outside the SQL block.

@@ -3,7 +3,7 @@ import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
 import { MigrateDialog } from "./components/MigrateDialog";
 import { useState, useEffect } from "react";
-import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight, Eye, ThumbsUp, ThumbsDown, Rocket } from "lucide-react";
+import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, Eye, ThumbsUp, ThumbsDown, Rocket } from "lucide-react";
 import { useStore } from "./store";
 import { api, AnalyzeResponse } from "./services/api";
 
@@ -86,10 +86,15 @@ function App() {
     setOriginalOutputCode("");
     setValidationResult(null);
     setAnalysisResult(null);
+
+    // Create a summmary report
+    const fixReport = `## Fix Applied ✅\n\n${analysisResult.explanation}`;
+
     addMessage({
       id: Date.now().toString(),
       role: 'agent',
-      content: "Fix accepted and applied! ✅"
+      content: fixReport,
+      isReport: true
     });
   };
 
@@ -157,10 +162,13 @@ function App() {
         ? "\n\nLogs:\n" + result.logs.join("\n")
         : "";
 
+      const messageContent = result.report || `Conversion complete! ${logsSummary}`;
+
       addMessage({
         id: Date.now().toString(),
         role: 'agent',
-        content: `Conversion complete! ${logsSummary}`
+        content: messageContent,
+        isReport: !!result.report
       });
     } catch (error) {
       console.error("Conversion error:", error);

@@ -102,11 +102,19 @@ class SchemaAgentService:
                 Provide the corrected version in a ```sql block.
                 """
         
+        # Extract report from the LAST successful response (response_text)
+        # Note: If we retried, 'response_text' holds the latest AP response.
+        # But retry prompts might NOT generate the full report again if we just asked to fix DDL.
+        # Typically, we want the initial detailed report. 
+        # However, for simplicity, we'll try to extract it from the latest response if possible, 
+        # OR we could persist the *first* full response's report if subsequent retries are just fixes.
+        # Let's extract from current 'response_text'.
+        report = self._extract_report(response_text)
+
         return {
             "converted_ddl": current_ddl,
             "logs": logs,
-            # We could optionally return the full "thoughts" if we wanted to show them in UI
-            # "full_response": response_text 
+            "report": report
         }
 
     async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> str:
@@ -208,6 +216,21 @@ class SchemaAgentService:
         # usually at the end.
         longest_match = max(matches, key=len)
         return longest_match.strip()
+
+    def _extract_report(self, text: str) -> str:
+        """
+        Extracts the 'Conversion Report' section from the response.
+        """
+        import re
+        # Look for ## Conversion Report ... until the next header or end of string, 
+        # or until the SQL block starts.
+        # Simple extraction: find "## Conversion Report" and take everything until "### STEP 4" or "```sql"
+        
+        match = re.search(r"(## Conversion Report.*?)(\n### STEP|\n```sql|$)", text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        return "Conversion report not available."
 
 # Global instance
 agent_service = SchemaAgentService.get_instance()

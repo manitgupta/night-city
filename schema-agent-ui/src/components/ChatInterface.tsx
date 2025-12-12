@@ -101,10 +101,22 @@ export function ChatInterface() {
                 {msg.role === 'agent' ? <Bot size={16} /> : <User size={16} />}
               </div>
               <div className={`flex flex-col gap-2 max-w-[85%] ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                <div className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed prose prose-invert prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-900 prose-pre:p-0 prose-pre:rounded-lg max-w-none ${msg.role === 'agent'
+                <div
+                  className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed prose prose-invert prose-p:my-1 prose-pre:my-2 prose-pre:bg-zinc-900 prose-pre:p-0 prose-pre:rounded-lg max-w-none ${msg.role === 'agent'
                     ? 'bg-zinc-800 text-zinc-100'
                     : 'bg-indigo-600 text-white'
-                  }`}>
+                    }`}
+                  style={msg.isReport ? {
+                    animation: 'flash-highlight 4s ease-out forwards'
+                  } : {}}
+                >
+                  <style>{`
+                    @keyframes flash-highlight {
+                      0% { background-color: rgba(99, 102, 241, 0.5); box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
+                      20% { background-color: rgba(99, 102, 241, 0.3); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
+                      100% { background-color: #27272a; box-shadow: none; } 
+                    }
+                  `}</style>
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
