@@ -2,7 +2,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
 import { useState } from "react";
-import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight } from "lucide-react";
+import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight, Eye, ThumbsUp, ThumbsDown } from "lucide-react";
 import { useStore } from "./store";
 import { api, AnalyzeResponse } from "./services/api";
 
@@ -22,6 +22,8 @@ function App() {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [originalOutputCode, setOriginalOutputCode] = useState<string>("");
   const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode } = useStore();
 
   const handleValidate = async () => {
@@ -40,6 +42,9 @@ function App() {
   };
 
   const closeValidationModal = () => {
+    if (isReviewing) return; // Prevent closing validation modal during review if we want to force a choice, or allow cancel. 
+    // Let's allow cancel but reset review state
+    setIsReviewing(false);
     setValidationResult(null);
     setAnalysisResult(null);
   };
@@ -57,15 +62,30 @@ function App() {
     }
   };
 
-  const applyFix = () => {
+  const startReview = () => {
+    if (!analysisResult) return;
+    setOriginalOutputCode(outputCode);
+    setIsReviewing(true);
+  };
+
+  const acceptFix = () => {
     if (!analysisResult) return;
     setOutputCode(analysisResult.fixed_ddl);
-    closeValidationModal();
+    setIsReviewing(false);
+    setOriginalOutputCode("");
+    setValidationResult(null);
+    setAnalysisResult(null);
     addMessage({
       id: Date.now().toString(),
       role: 'agent',
-      content: "I've applied the fix based on the analysis. Try validating again!"
+      content: "Fix accepted and applied! ✅"
     });
+  };
+
+  const rejectFix = () => {
+    setIsReviewing(false);
+    setOriginalOutputCode("");
+    // Keep validation modal open so they can try again or see analysis
   };
 
   const handleConvert = async () => {
@@ -103,25 +123,60 @@ function App() {
 
   return (
     <div className="h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col font-sans selection:bg-indigo-500/30 relative">
-      {/* Validation Modal Overlay */}
-      {validationResult && (
+      {/* Validation Modal Overlay (Hidden when Reviewing) */}
+      {validationResult && !isReviewing && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          {/* If Reviewing, show a smaller top-center modal or floating action bar? 
+              Actually, user said 'Accept/Reject button shows up along with the diff view'.
+              Let's keep the modal but make it minimal or move it.
+              Or, simply change the content of THIS modal to be the 'Control Center' for the review.
+          */}
           <div
             className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
+            {!isReviewing && (
             <div className={`px-6 py-4 flex items-center gap-3 border-b ${validationResult.valid ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`}>
-              {validationResult.valid ? (
-                <CheckCircle className="text-emerald-400 shrink-0" size={24} />
-              ) : (
-                <XCircle className="text-red-400 shrink-0" size={24} />
-              )}
-              <h3 className={`text-lg font-semibold ${validationResult.valid ? "text-emerald-300" : "text-red-300"}`}>
-                {validationResult.valid ? "Validation Successful" : "Validation Failed"}
-              </h3>
-              <button onClick={closeValidationModal} className="ml-auto text-zinc-400 hover:text-white transition-colors">✕</button>
-            </div>
-
+                {/* ... existing header ... */}
+                {validationResult.valid ? (
+                  <CheckCircle className="text-emerald-400 shrink-0" size={24} />
+                ) : (
+                  <XCircle className="text-red-400 shrink-0" size={24} />
+                )}
+                <h3 className={`text-lg font-semibold ${validationResult.valid ? "text-emerald-300" : "text-red-300"}`}>
+                  {validationResult.valid ? "Validation Successful" : "Validation Failed"}
+                </h3>
+                <button onClick={closeValidationModal} className="ml-auto text-zinc-400 hover:text-white transition-colors">✕</button>
+              </div>
+            )}
+            {isReviewing ? (
+              // Review Mode UI
+              <div className="p-6 flex flex-col items-center gap-4">
+                <h3 className="text-xl font-semibold text-zinc-100">Review Proposed Fix</h3>
+                <p className="text-zinc-400 text-center text-sm">
+                  Review the changes in the Diff View on the right. <br />
+                  Green lines are additions, red lines are removals.
+                </p>
+                <div className="flex items-center gap-4 mt-2">
+                  <button
+                    onClick={rejectFix}
+                    className="flex items-center gap-2 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-lg font-medium transition-colors border border-zinc-700"
+                  >
+                    <ThumbsDown size={18} />
+                    Reject
+                  </button>
+                  <button
+                    onClick={acceptFix}
+                    className="flex items-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-500/20 transition-all"
+                  >
+                    <ThumbsUp size={18} />
+                    Accept Fix
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // Normal Analysis/Validation UI
+              <>
             {analysisResult ? (
               <div className="p-6 bg-indigo-500/5 border-b border-indigo-500/10 animate-in slide-in-from-bottom-2">
                 <div className="flex items-center gap-2 mb-3 text-indigo-400 font-semibold">
@@ -131,14 +186,11 @@ function App() {
                 <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
                   {analysisResult.explanation}
                 </div>
-                <div className="mt-4 p-3 bg-zinc-950 rounded border border-zinc-800 font-mono text-xs text-zinc-400 overflow-x-auto">
-                  {/* Preview first few lines of fix */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="uppercase text-[10px] tracking-wider text-zinc-500">Proposed Fix Preview</span>
+                      {!isReviewing && (
+                        <div className="mt-4 p-3 bg-zinc-950 rounded border border-zinc-800 font-mono text-xs text-zinc-500 text-center italic">
+                          Click "Review Fix" to see the full diff and apply changes.
                   </div>
-                  {analysisResult.fixed_ddl.split('\n').slice(0, 5).join('\n')}
-                  {analysisResult.fixed_ddl.split('\n').length > 5 && "\n..."}
-                </div>
+                      )}
               </div>
             ) : (
                 <div className="p-6 max-h-[60vh] overflow-y-auto">
@@ -187,13 +239,13 @@ function App() {
               )}
 
               {analysisResult && (
-                <button
-                  onClick={applyFix}
-                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-emerald-500/20"
-                >
-                  <ArrowRight size={16} />
-                  Apply Fix
-                </button>
+                      <button
+                        onClick={startReview}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-indigo-500/20"
+                      >
+                        <Eye size={16} />
+                        Review Fix
+                      </button>
               )}
 
               <button
@@ -203,6 +255,9 @@ function App() {
                 Close
               </button>
             </div>
+              </>
+            )
+            }
           </div>
         </div>
       )}
@@ -317,12 +372,34 @@ function App() {
           {/* Middle Panel: Output */}
           <Panel defaultSize={40} minSize={20}>
             <SchemaEditor
-              title="Cloud Spanner DDL" 
+              title={isReviewing ? "Review Fix (Diff View)" : "Cloud Spanner DDL"} 
               type="output"
               showHint={true}
               readOnly={false} // Always editable/selectable per previous request
               isLoading={isConverting}
+              diffMode={isReviewing}
+              diffOriginal={originalOutputCode}
+              diffModified={analysisResult?.fixed_ddl || ""}
               headerActions={
+                isReviewing ? (
+                  <div className="flex items-center gap-2 mr-2">
+                    <span className="text-xs text-zinc-400 mr-2">Reviewing Fix...</span>
+                    <button
+                      onClick={rejectFix}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-red-900/30 text-red-300 hover:text-red-200 border border-zinc-700 hover:border-red-800 rounded-md text-xs font-medium transition-all"
+                    >
+                      <ThumbsDown size={14} />
+                      Reject
+                    </button>
+                    <button
+                      onClick={acceptFix}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      <ThumbsUp size={14} />
+                      Accept
+                    </button>
+                  </div>
+                ) : (
                 <div className="flex items-center gap-2 mr-2">
                   {/* Verification Checkbox */}
                   <div className="flex items-center gap-2 group relative">
@@ -367,6 +444,7 @@ function App() {
                     Validate
                   </button>
                 </div>
+                  )
               }
             />
           </Panel>

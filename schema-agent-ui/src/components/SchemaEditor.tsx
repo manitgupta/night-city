@@ -1,5 +1,6 @@
+
 import React, { useRef } from "react";
-import { Editor, OnMount } from "@monaco-editor/react";
+import { Editor, DiffEditor, OnMount } from "@monaco-editor/react";
 import { Copy, FileCode2 } from "lucide-react";
 import { useStore } from "../store";
 
@@ -10,6 +11,9 @@ interface SchemaEditorProps {
   readOnly?: boolean;
   headerActions?: React.ReactNode;
   isLoading?: boolean;
+  diffMode?: boolean;
+  diffOriginal?: string;
+  diffModified?: string;
 }
 
 const LOADING_TEXTS = [
@@ -124,7 +128,10 @@ export function SchemaEditor({
   showHint = false,
   readOnly = false,
   headerActions,
-  isLoading = false
+  isLoading = false,
+  diffMode = false,
+  diffOriginal = "",
+  diffModified = ""
 }: SchemaEditorProps) {
   const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection, selection } = useStore();
   const editorRef = useRef<any>(null);
@@ -133,6 +140,7 @@ export function SchemaEditor({
 
   // Sync decoration with global selection state
   React.useEffect(() => {
+    if (diffMode) return;
     const editor = editorRef.current;
     if (!editor || !editor.getModel()) return;
 
@@ -160,7 +168,7 @@ export function SchemaEditor({
       // Clear decorations if no selection or selection is elsewhere
       decorationsRef.current = editor.deltaDecorations(decorationsRef.current, []);
     }
-  }, [selection, type]);
+  }, [selection, type, diffMode]);
 
   React.useEffect(() => {
     if (!isLoading) return;
@@ -214,25 +222,46 @@ export function SchemaEditor({
         </div>
       </div>
       <div className="flex-1 relative group bg-zinc-900">
-        <Editor
-          height="100%"
-          defaultLanguage="sql"
-          value={code}
-          onChange={(val) => setCode(val || "")}
-          theme="vs-dark"
-          onMount={handleEditorDidMount}
-          options={{
-            readOnly: readOnly || isLoading, // Lock editor while loading
-            minimap: { enabled: false },
-            fontSize: 14,
-            lineNumbers: "on",
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            padding: { top: 16, bottom: 16 },
-            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-            renderLineHighlight: "all",
-          }}
-        />
+        {diffMode ? (
+          <DiffEditor
+            height="100%"
+            language="sql"
+            original={diffOriginal}
+            modified={diffModified}
+            theme="vs-dark"
+            options={{
+              readOnly: true,
+              minimap: { enabled: false },
+              fontSize: 14,
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              padding: { top: 16, bottom: 16 },
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              renderSideBySide: false, // Inline diff for compact view
+            }}
+          />
+        ) : (
+            <Editor
+              height="100%"
+              defaultLanguage="sql"
+              value={code}
+              onChange={(val) => setCode(val || "")}
+              theme="vs-dark"
+              onMount={handleEditorDidMount}
+              options={{
+                readOnly: readOnly || isLoading, // Lock editor while loading
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: "on",
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: { top: 16, bottom: 16 },
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                renderLineHighlight: "all",
+              }}
+            />
+        )}
 
         {/* Loading Overlay */}
         {isLoading && (
