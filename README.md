@@ -5,16 +5,38 @@
 ## 🚀 Key Features
 
 - **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* and *verifies* your schema.
-- **Human-in-the-Loop**: Dual-pane editors allow you to review source and output, apply agent fixes, and tweak DDL manually.
-- **Real-World Verification**: Optional integration with a real Spanner instance to validate DDL against actual database constraints.
-- **Interactive Chat**: Ask questions, request refactors (e.g., "Use UUIDs instead of SERIAL"), and get context-aware answers.
+- **Human-in-the-Loop**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
+- **Real-World Verification**: Integrates with a live Spanner instance to validate DDL against actual database constraints.
+- **Analyze & Fix**: If verification fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject.
+- **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
+- **Interactive Chat**: Ask questions, request refactors (e.g., "Use UUIDs instead of SERIAL"), and get context-aware answers with markdown support.
 
 ## 🏗️ Architecture
 
 The project consists of two main components:
 
-1.  **Backend (`schema-agent-backend`)**: A FastAPI Python service that hosts the AI agent (using Google Gemini models) and handles verification logic.
+1.  **Backend (`schema-agent-backend`)**: A FastAPI Python service that hosts the AI agent (using Google Gemini models). It includes specialized tools for **Schema Verification**, **Error Analysis**, and **Spanner Migration**.
 2.  **Frontend (`schema-agent-ui`)**: A text-based, dark-mode React application providing the conversion interface.
+
+### 🧠 Agentic Architecture
+
+The core of Night City is a sophisticated AI pipeline that goes beyond simple translation:
+
+#### 1. Contextual Augmentation (RAG)
+Before the agent sees your schema, a **Context Manager** analyzes the Source DDL to inject relevant knowledge:
+- **DDL Hints**: Scans for specific SQL keywords (e.g., `AUTO_INCREMENT`, `FOREIGN KEY`) and injects the exact Spanner DDL syntax rules for those features.
+- **Feature Hints**: Detects patterns dependent on Spanner topology (e.g., identifying parent-child relationships for `INTERLEAVE IN PARENT`).
+- **Mapping Rules**: Enforces deterministic data type conversions (e.g., PostgreSQL `JSONB` → Spanner `JSON`) based on the selected dialect.
+
+#### 2. Chain of Thought (CoT) Reasoning
+The agent is prompted to follow a rigid "Principal Engineer" workflow:
+1.  **Analyze**: Parse the source schema and identify constraints.
+2.  **Plan**: Propose Spanner-specific optimizations (Interleaving, Sharding keys).
+3.  **Generate**: Output clean, valid DDL.
+
+#### 3. Human-in-the-Loop Validation
+- **Verification Loop**: If enabled, the agent attempts to create the schema on a real Spanner instance.
+- **Self-Correction**: If verification fails, the error is fed back to the agent ("Analyze & Fix"), which decompiles the error and attempts a targeted fix.
 
 ## 🛠️ Setup & Installation
 
@@ -32,7 +54,7 @@ Create a `.env` file in this root directory with the following variables:
 SPANNER_PROJECT_ID="your-project-id"
 SPANNER_INSTANCE_ID="your-instance-id"
 
-# LangChain / Model Configuration
+# Model Configuration
 GOOGLE_API_KEY="your-gemini-api-key"
 ```
 
@@ -66,7 +88,9 @@ The frontend will start at `http://localhost:5173` (or similar).
 5.  **Refine**:
     - Highlight code to ask the agent specific questions.
     - Chat with the agent to request changes (e.g., "Add a `shard_id` column").
-    - Click "Apply Fix" when the agent proposes code changes.
+    - Click "Apply Fix" or "Review Fix" when the agent proposes code changes.
+6.  **Migrate**: 
+    - Once satisfied, click "Migrate" to deploy the schema to a new Google Cloud Spanner database.
 
 ## 🤝 Contributing
 We welcome contributions! Please follow the `standard` code style and ensured all new features have appropriate tests.

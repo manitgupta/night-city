@@ -14,14 +14,15 @@ A slick, dark-mode "pair programming" interface for converting SQL schemas to Cl
 - **Dual-Panel Selection**: Highlight code in **either** Source or Output editors to ask context-aware questions.
 - **Floating Hints**: "Highlight code to ask agent" appears on hover in the interactive Spanner editor.
 
-### 3. Agent "Apply Fix" Workflow
-- **Interactive Chat**: The agent analyzes your request (detects "fix" or "pk").
-- **Targeted Fixes**: Can apply fixes to **Source** (e.g. `SERIAL` -> `UUID`) or **Output** (e.g. optimizing Spanner DDL directly).
-- **One-Click Apply**: Clicking "Apply Fix" updates the respective editor.
+### 3. Agent "Analyze & Fix" Workflow
+- **Interactive Chat**: The agent analyzes your request (detects "fix" or "pk") and uses **Markdown** for rich text responses.
+- **Diff View Review**: When the agent proposes complex fixes (or analyzes a validation error), you can review changes in a dedicated **Diff View** (green/red highlights).
+- **Accept/Reject**: Seamlessly accept or reject proposed changes with one click.
 
-### 4. Real-time Verification
+### 4. Real-time Verification & Migration
 - **Spanner Verification**: Optional "Enable verification?" toggle in the Output editor.
 - **Validation Loop**: When enabled, the DDL is validated against a real Spanner instance to catch complex issues.
+- **Direct Migration**: Successfully validated schemas can be deployed to a new Spanner database via the "Migrate" button.
 - **Feedback**: Provides a slick loading overlay with status updates during the verification process.
 
 ## Visuals
