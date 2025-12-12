@@ -2,9 +2,9 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { SchemaEditor } from "./components/SchemaEditor";
 import { ChatInterface } from "./components/ChatInterface";
 import { useState } from "react";
-import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, ArrowRight } from "lucide-react";
 import { useStore } from "./store";
-import { api } from "./services/api";
+import { api, AnalyzeResponse } from "./services/api";
 
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
@@ -20,6 +20,8 @@ function App() {
   const [sourceDialect, setSourceDialect] = useState<string | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode } = useStore();
 
   const handleValidate = async () => {
@@ -37,7 +39,34 @@ function App() {
     }
   };
 
-  const closeValidationModal = () => setValidationResult(null);
+  const closeValidationModal = () => {
+    setValidationResult(null);
+    setAnalysisResult(null);
+  };
+
+  const handleAnalyzeError = async () => {
+    if (!validationResult || validationResult.valid) return;
+    setIsAnalyzing(true);
+    try {
+      const result = await api.analyzeError(sourceCode, outputCode, validationResult.errors.join("\n"));
+      setAnalysisResult(result);
+    } catch (error) {
+      console.error("Analysis error:", error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const applyFix = () => {
+    if (!analysisResult) return;
+    setOutputCode(analysisResult.fixed_ddl);
+    closeValidationModal();
+    addMessage({
+      id: Date.now().toString(),
+      role: 'agent',
+      content: "I've applied the fix based on the analysis. Try validating again!"
+    });
+  };
 
   const handleConvert = async () => {
     if (!sourceDialect) return;
@@ -93,30 +122,80 @@ function App() {
               <button onClick={closeValidationModal} className="ml-auto text-zinc-400 hover:text-white transition-colors">✕</button>
             </div>
 
-            <div className="p-6 max-h-[60vh] overflow-y-auto">
-              {validationResult.valid ? (
-                <div className="text-zinc-300 flex flex-col gap-2">
-                  <p>The DDL syntax appears valid and compatible with Google Cloud Spanner.</p>
-                  <div className="p-4 bg-emerald-500/5 rounded-lg border border-emerald-500/10 text-sm text-emerald-200/80 font-mono mt-2">
-                    No errors found.
-                  </div>
+            {analysisResult ? (
+              <div className="p-6 bg-indigo-500/5 border-b border-indigo-500/10 animate-in slide-in-from-bottom-2">
+                <div className="flex items-center gap-2 mb-3 text-indigo-400 font-semibold">
+                  <Microscope size={18} />
+                  <span>Agent Analysis</span>
                 </div>
-              ) : (
-                <div className="text-zinc-300">
-                  <p className="mb-4 text-sm text-zinc-400">The following errors were found during verification:</p>
-                  <div className="space-y-2">
-                    {validationResult.errors.map((err, idx) => (
-                      <div key={idx} className="flex gap-3 p-3 bg-red-500/5 border border-red-500/10 rounded-lg text-sm text-red-200/90 font-mono break-all">
-                        <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
-                        <span>{err}</span>
+                <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
+                  {analysisResult.explanation}
+                </div>
+                <div className="mt-4 p-3 bg-zinc-950 rounded border border-zinc-800 font-mono text-xs text-zinc-400 overflow-x-auto">
+                  {/* Preview first few lines of fix */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="uppercase text-[10px] tracking-wider text-zinc-500">Proposed Fix Preview</span>
+                  </div>
+                  {analysisResult.fixed_ddl.split('\n').slice(0, 5).join('\n')}
+                  {analysisResult.fixed_ddl.split('\n').length > 5 && "\n..."}
+                </div>
+              </div>
+            ) : (
+                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                  {validationResult.valid ? (
+                    <div className="text-zinc-300 flex flex-col gap-2">
+                      <p>The DDL syntax appears valid and compatible with Google Cloud Spanner.</p>
+                      <div className="p-4 bg-emerald-500/5 rounded-lg border border-emerald-500/10 text-sm text-emerald-200/80 font-mono mt-2">
+                        No errors found.
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-zinc-300">
+                      <p className="mb-4 text-sm text-zinc-400">The following errors were found during verification:</p>
+                      <div className="space-y-2">
+                        {validationResult.errors.map((err, idx) => (
+                          <div key={idx} className="flex gap-3 p-3 bg-red-500/5 border border-red-500/10 rounded-lg text-sm text-red-200/90 font-mono break-all">
+                            <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+                            <span>{err}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+            )}
 
-            <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end">
+            <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end gap-3">
+              {!validationResult.valid && !analysisResult && (
+                <button
+                  onClick={handleAnalyzeError}
+                  disabled={isAnalyzing}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50 disabled:cursor-wait"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Microscope size={16} />
+                      Analyze & Fix
+                    </>
+                  )}
+                </button>
+              )}
+
+              {analysisResult && (
+                <button
+                  onClick={applyFix}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-emerald-500/20"
+                >
+                  <ArrowRight size={16} />
+                  Apply Fix
+                </button>
+              )}
+
               <button
                 onClick={closeValidationModal}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium transition-colors"

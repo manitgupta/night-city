@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.agent import agent_service
-from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse
+from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse
 
 import os
 from pathlib import Path
@@ -65,5 +65,17 @@ async def validate_ddl(request: ValidateRequest):
         verifier = SpannerVerificationTool()
         result = await verifier.verify_ddl(request.ddl)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze_error", response_model=AnalyzeResponse)
+async def analyze_error(request: AnalyzeRequest):
+    try:
+        result = await agent_service.analyze_fix(
+            request.source_ddl,
+            request.generated_ddl,
+            request.error_message
+        )
+        return AnalyzeResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

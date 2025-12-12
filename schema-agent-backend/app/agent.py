@@ -145,6 +145,47 @@ class SchemaAgentService:
         response = chat.send_message(full_prompt)
         return response.text
 
+    async def analyze_fix(self, source_ddl: str, generated_ddl: str, error_message: str) -> Dict[str, str]:
+        """
+        Analyzes validation error and returns explanation + fix.
+        """
+        from app.prompts import generate_analyze_prompt
+        import json
+        import re
+
+        prompt = generate_analyze_prompt(
+            source_ddl=source_ddl,
+            generated_ddl=generated_ddl,
+            error_message=error_message
+        )
+        
+        from google import genai
+        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        
+        chat = client.chats.create(
+            model=self.model_name,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json" 
+            )
+        )
+        response = chat.send_message(prompt)
+        text = response.text
+        
+        try:
+            # Clean potential markdown
+            if "```json" in text:
+                text = text.split("```json")[1].split("```")[0]
+            elif "```" in text:
+                text = text.split("```")[0]
+                
+            return json.loads(text)
+        except Exception as e:
+            logger.error(f"Failed to parse analysis JSON: {e}")
+            return {
+                "explanation": "Failed to parse model response.",
+                "fixed_ddl": generated_ddl # Fallback
+            }
+
     def _extract_sql(self, text: str) -> str:
         """
         Extracts SQL from markdown code blocks. 

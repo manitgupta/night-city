@@ -77,5 +77,31 @@ export const api = {
         }
 
         return response.json();
+    },
+
+    async analyzeError(sourceDdl: string, generatedDdl: string, errorMessage: string): Promise<AnalyzeResponse> {
+        const response = await fetch(`${API_BASE_URL}/analyze_error`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                source_ddl: sourceDdl,
+                generated_ddl: generatedDdl,
+                error_message: errorMessage
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Analysis failed: ${response.statusText}`);
+        }
+
+        return response.json();
     }
 };
+
+export interface AnalyzeResponse {
+    explanation: string;
+    fixed_ddl: string;
+}

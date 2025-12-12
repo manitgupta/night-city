@@ -18,3 +18,15 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+
+class ValidateRequest(BaseModel):
+    ddl: str
+
+class AnalyzeRequest(BaseModel):
+    source_ddl: str
+    generated_ddl: str
+    error_message: str
+
+class AnalyzeResponse(BaseModel):
+    explanation: str
+    fixed_ddl: str

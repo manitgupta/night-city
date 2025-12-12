@@ -39,9 +39,42 @@ Follow this rigid step-by-step reasoning process:
 # CURRENT TASK
 **Source Dialect**: {dialect}
 **Source DDL**:
+
 ```sql
 {source_ddl}
 ```
 
 Begin your response with "### STEP 1: ANALYZE".
+"""
+
+def generate_analyze_prompt(source_ddl: str, generated_ddl: str, error_message: str) -> str:
+    """
+    Generates a prompt for analyzing and fixing DDL errors.
+    """
+    return f"""
+You are an expert Spanner Database Engineer.
+The following Spanner DDL generated from the Source DDL failed validation.
+
+Source DDL:
+```sql
+{source_ddl}
+```
+
+Generated Spanner DDL:
+```sql
+{generated_ddl}
+```
+
+Validation Error:
+{error_message}
+
+INSTRUCTION:
+1. Analyze the error strictly relative to Spanner DDL syntax and constraints.
+2. Identify the root cause (e.g., unsupported type, missing parent table, illegal option).
+3. Provide a corrected version of the DDL.
+4. Return the result in valid JSON format with the following keys:
+   - "explanation": A concise string explaining the error and the fix.
+   - "fixed_ddl": The fully corrected Spanner DDL block.
+
+CRITICAL: Return ONLY JSON. No markdown formatting around the JSON.
 """
