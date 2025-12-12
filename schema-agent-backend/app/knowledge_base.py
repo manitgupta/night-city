@@ -1,7 +1,10 @@
 # Spanner DDL Knowledge Base
 # Extracted from official documentation
 
-SPANNER_KNOWLEDGE_BASE = [
+# Spanner DDL Knowledge Base
+# Extracted from official documentation
+
+DDL_SYNTAX_KNOWLEDGE_BASE = [
     {
         "keywords": ["CREATE TABLE", "TABLE"],
         "topic": "CREATE TABLE Syntax",
@@ -110,9 +113,20 @@ MAX for BYTES is 10,485,760 bytes.
     }
 ]
 
+# Feature Hints for specific deep scenarios
+FEATURE_BASED_KNOWLEDGE_BASE = [
+    {
+        "keywords": ["FOREIGN KEY", "REFERENCES", "INTERLEAVE"],
+        "topic": "Interleaving Requirement",
+        "rule": "CRITICAL: If the primary key of the child table includes a column that is NOT NULL, and that same column is the prefix (primary key) of the parent table, then it MUST also be NOT NULL in the parent table.",
+        "syntax": "Parent: Id INT64 NOT NULL ... Child: Id INT64 NOT NULL ... INTERLEAVE IN PARENT Parent",
+        "priority": "CRITICAL"
+    }
+]
+
 # Deterministic Mapping Rules from Spanner Migration Tool
 # Source: https://github.com/GoogleCloudPlatform/spanner-migration-tool
-MAPPING_RULES = {
+MAPPING_RULES_KNOWLEDGE_BASE = {
     "PostgreSQL": [
         {"source_type": "SERIAL / BIGSERIAL", "spanner_type": "INT64", "note": "Use BIT_REVERSED_SEQUENCE or UUID (STRING(36)) to avoid hotspots."},
         {"source_type": "TEXT", "spanner_type": "STRING(MAX)", "note": "Spanner has no TEXT type."},

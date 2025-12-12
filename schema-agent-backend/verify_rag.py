@@ -26,15 +26,15 @@ async def test_rag_conversion():
     """
     
     print("--- Testing RAG Logic ---")
-    hints = context_manager.get_hints(source_ddl)
-    print(f"Detected Hints: {len(hints)}")
-    for h in hints:
-        print(f"- {h['topic']}")
+    ddl = context_manager.get_ddl_hints(source_ddl)
+    features = context_manager.get_feature_hints(source_ddl)
+    print(f"Detected DDL Hints: {len(ddl)}")
+    print(f"Detected Feature Hints: {len(features)}")
     
-    if any(h['topic'] == 'CREATE TABLE Syntax' for h in hints):
-        print("SUCCESS: Detected 'CREATE TABLE Syntax' opportunity.")
+    if any(h['topic'] == 'Interleaving Requirement' for h in features):
+        print("SUCCESS: Detected 'Interleaving Requirement' feature hint.")
     else:
-        print("FAILURE: Did not detect 'CREATE TABLE Syntax' opportunity.")
+        print("FAILURE: Did not detect 'Interleaving Requirement' feature hint.")
 
     print("\n--- Running Conversion (Verification Disabled) ---")
     result = await agent_service.convert_schema(source_ddl, "MySQL", verify_ddl=False)

@@ -1,39 +1,44 @@
 from typing import List, Dict
-from app.knowledge_base import SPANNER_KNOWLEDGE_BASE, MAPPING_RULES
+from app.knowledge_base import DDL_SYNTAX_KNOWLEDGE_BASE, MAPPING_RULES_KNOWLEDGE_BASE, FEATURE_BASED_KNOWLEDGE_BASE
 
 class ContextManager:
     def __init__(self):
-        self.kb = SPANNER_KNOWLEDGE_BASE
-        self.mappings = MAPPING_RULES
+        self.ddl_kb = DDL_SYNTAX_KNOWLEDGE_BASE
+        self.feature_kb = FEATURE_BASED_KNOWLEDGE_BASE
+        self.mappings = MAPPING_RULES_KNOWLEDGE_BASE
 
-    def get_hints(self, source_ddl: str) -> List[Dict[str, str]]:
+    def get_ddl_hints(self, source_ddl: str) -> List[Dict[str, str]]:
         """
-        Scans source_ddl for keywords and returns relevant knowledge base entries.
-        Returns a list of hints (topic, rule, syntax).
+        Scans source_ddl for keywords and returns relevant DDL Syntax definitions.
         """
         hints = []
         source_upper = source_ddl.upper()
         
-        # Simple keyword matching for now. 
-        # In a real RAG system, we would embed the source_ddl and semantic search.
-        for entry in self.kb:
-            # If ANY keyword matches, we include the hint
+        for entry in self.ddl_kb:
             for keyword in entry["keywords"]:
                 if keyword in source_upper:
-                    hints.append({
-                        "topic": entry["topic"],
-                        "rule": entry["rule"],
-                        "syntax": entry["syntax"]
-                    })
-                    break # Avoid adding same hint multiple times if multiple keywords match
+                    hints.append(entry)
+                    break 
+        return hints
+
+    def get_feature_hints(self, source_ddl: str) -> List[Dict[str, str]]:
+        """
+        Scans source for patterns triggering specific Feature rules (e.g. Interleaving checks).
+        """
+        hints = []
+        source_upper = source_ddl.upper()
         
+        for entry in self.feature_kb:
+            for keyword in entry["keywords"]:
+                if keyword in source_upper:
+                    hints.append(entry)
+                    break
         return hints
 
     def get_mapping_rules(self, dialect: str) -> List[Dict[str, str]]:
         """
         Returns mapping rules for the specific dialect.
         """
-        # Normalize dialect name (e.g. "postgres" -> "PostgreSQL")
         d = dialect.lower()
         if "postgres" in d:
             return self.mappings.get("PostgreSQL", [])
@@ -41,17 +46,18 @@ class ContextManager:
             return self.mappings.get("MySQL", [])
         return []
 
-    def format_hints_for_prompt(self, hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]] = None) -> str:
+    def format_hints_for_prompt(self, ddl_hints: List[Dict[str, str]], feature_hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]]) -> str:
         """
-        Formats the hints and mapping rules into a string block for the LLM prompt.
+        Formats all hints into a string block for the LLM prompt.
         """
-        if not hints and not mapping_rules:
+        if not ddl_hints and not feature_hints and not mapping_rules:
             return ""
             
         block = "### DOCUMENTATION & SYNTAX REFERENCE (Based on Source Patterns)\n"
         
+        # 1. Mappings
         if mapping_rules:
-             block += "#### 1. DATA TYPE MAPPING RULES (Deterministic)\n"
+             block += "#### 1. MAPPING HINTS (Deterministic Data Types)\n"
              block += "You MUST apply the following type conversions:\n"
              block += "| Source Type | Spanner Type | Notes |\n"
              block += "|---|---|---|\n"
@@ -59,10 +65,21 @@ class ContextManager:
                  block += f"| `{rule['source_type']}` | `{rule['spanner_type']}` | {rule['note']} |\n"
              block += "\n"
 
-        if hints:
-            block += "#### 2. DDL SYNTAX REFERENCE\n"
+        # 2. Feature Hints
+        if feature_hints:
+            block += "#### 2. FEATURE HINTS (Critical Logic)\n"
+            for i, hint in enumerate(feature_hints, 1):
+                block += f"**{hint['topic']}**\n"
+                block += f"Rule: {hint['rule']}\n"
+                if hint.get("syntax"):
+                    block += f"Reference: `{hint['syntax']}`\n"
+                block += "\n"
+
+        # 3. DDL Syntax
+        if ddl_hints:
+            block += "#### 3. DDL HINTS (Syntax Reference)\n"
             block += "Use the following official Spanner DDL syntax definitions. **You must strictly adhere to this grammar.**\n\n"
-            for i, hint in enumerate(hints, 1):
+            for i, hint in enumerate(ddl_hints, 1):
                 block += f"**{hint['topic']}**\n"
                 block += f"{hint['rule']}\n"
                 block += f"```sql\n{hint['syntax'].strip()}\n```\n\n"

@@ -31,7 +31,8 @@ Follow this rigid step-by-step reasoning process:
 
 ### STEP 3: GENERATE SPANNER DDL
 *   Output the final clean DDL inside a ```sql block.
-*   Include comments explaining specific optimizations (e.g., "-- Using BIT_REVERSED_SEQUENCE to avoid hotspots").
+*   **CRITICAL**: Do NOT include any comments (starting with `--` or `/*`) inside the SQL block. Spanner DDL does not support them and validation will fail.
+*   All explanations must be outside the SQL block.
 
 ---
 
@@ -47,11 +48,11 @@ CREATE TABLE Users (
 ```
 
 **Model Output**:
-### STEP 1: ANALYZE
+### STEP 1: ANALYZE SOURCE SCHEMA & GRAMMAR
 *   Table `Users` has `SERIAL` PK `id`. This is a monotonically increasing integer.
 *   **Risk**: In Spanner, sequential writes to a Primary Key cause "hotspots" because all writes go to the end of the key space (one server).
 
-### STEP 2: PLAN
+### STEP 2: PLAN SPANNER SCHEMA
 *   **Fix**: Use Spanner's `BIT_REVERSED_SEQUENCE` feature or a UUID. 
 *   **Decision**: Use `BIT_REVERSED_SEQUENCE` to keep integer compatibility but gain performance.
 
@@ -83,11 +84,11 @@ CREATE TABLE Albums (
 ```
 
 **Model Output**:
-### STEP 1: ANALYZE
+### STEP 1: ANALYZE SOURCE SCHEMA & GRAMMAR
 *   `Albums` has a composite PK starting with `SingerId`.
 *   Start of PK matches Parent PK. Strong candidate for Parent-Child relationship.
 
-### STEP 2: PLAN
+### STEP 2: PLAN SPANNER SCHEMA
 *   **Optimization**: Use `INTERLEAVE IN PARENT Singers` for `Albums`. This physically co-locates Album data with Singer data, speeding up joins and lookups by Singer.
 
 ### STEP 3: GENERATE SPANNER DDL
