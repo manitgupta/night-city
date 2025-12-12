@@ -85,7 +85,8 @@ function App() {
   const rejectFix = () => {
     setIsReviewing(false);
     setOriginalOutputCode("");
-    // Keep validation modal open so they can try again or see analysis
+    setValidationResult(null);
+    setAnalysisResult(null);
   };
 
   const handleConvert = async () => {
