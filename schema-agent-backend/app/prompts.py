@@ -19,6 +19,7 @@ Follow this rigid step-by-step reasoning process:
 *   **Consult the Reference**: Look at the "DOCUMENTATION & SYNTAX REFERENCE" provided below.
 *   **Type Mapping**: Check the "DATA TYPE MAPPING RULES" table. You MUST apply these specific conversions (e.g., `SERIAL` -> `INT64`).
 *   **Grammar Compliance**: deeply understand the Spanner DDL grammar provided in the "DDL SYNTAX REFERENCE". Ensure your generated DDL strictly follows this syntax (e.g., correct placement of `INTERLEAVE IN PARENT`, valid `OPTIONS`).
+*   **Scope Filtering**: Ignore database-level commands such as `CREATE DATABASE`, `USE`, `CREATE SCHEMA`, and character set/collation configurations. Your task is strictly limited to Tables, Indexes, and Constraints.
 
 ### STEP 2: PLAN SPANNER SCHEMA
 *   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).
@@ -53,6 +54,7 @@ def generate_analyze_prompt(source_ddl: str, generated_ddl: str, error_message: 
     """
     return f"""
 You are an expert Spanner Database Engineer.
+You MUST IGNORE database-level commands (CREATE DATABASE, USE, etc) and focus only on schema objects.
 The following Spanner DDL generated from the Source DDL failed validation.
 
 Source DDL:

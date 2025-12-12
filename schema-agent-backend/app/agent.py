@@ -24,7 +24,7 @@ class SchemaAgentService:
         self.agent = Agent(
             name="SchemaAgent",
             model=self.model_name,
-            static_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL.",
+            static_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL. You MUST IGNORE database-level commands (CREATE DATABASE, USE, etc) and focus only on schema objects.",
         )
         self.active_chats: Dict[str, Any] = {}
 
@@ -139,7 +139,7 @@ class SchemaAgentService:
         chat = client.chats.create(
             model=self.model_name,
             config=types.GenerateContentConfig(
-                system_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL."
+                system_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL. You MUST IGNORE database-level commands (CREATE DATABASE, USE, etc) and focus only on schema objects."
             )
         )
         response = chat.send_message(full_prompt)

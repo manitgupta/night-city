@@ -6,6 +6,13 @@
 
 DDL_SYNTAX_KNOWLEDGE_BASE = [
     {
+        "keywords": ["CREATE DATABASE", "USE", "CREATE SCHEMA"],
+        "topic": "Ignored Commands",
+        "rule": "Commands like CREATE DATABASE, USE, and CREATE SCHEMA are NOT supported in Spanner Schema DDL. They MUST be ignored/removed.",
+        "syntax": "-- IGNORED: CREATE DATABASE ...",
+        "priority": "CRITICAL"
+    },
+    {
         "keywords": ["CREATE TABLE", "TABLE"],
         "topic": "CREATE TABLE Syntax",
         "rule": "Full syntax for creating tables in Spanner, including interleaving and constraints.",
