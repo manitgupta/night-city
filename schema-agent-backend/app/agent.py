@@ -142,7 +142,7 @@ class SchemaAgentService:
         """
 
         from google import genai
-        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
         chat = client.chats.create(
             model=self.model_name,
@@ -168,7 +168,7 @@ class SchemaAgentService:
         )
         
         from google import genai
-        client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
         chat = client.chats.create(
             model=self.model_name,

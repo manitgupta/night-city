@@ -9,7 +9,7 @@ export interface ChatResponse {
     response: string;
 }
 
-const API_BASE_URL = "http://localhost:8001";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8001" : "");
 
 export interface ValidationResponse {
     valid: boolean;
@@ -21,6 +21,12 @@ export interface MigrateResponse {
     message: string;
     database_uri: string;
 }
+
+export interface ConfigResponse {
+    spanner_project_id: string;
+    spanner_instance_id: string;
+}
+
 
 export const api = {
     async convertSchema(sourceDdl: string, sourceDialect: string, verify: boolean): Promise<ConversionResponse> {
@@ -126,6 +132,14 @@ export const api = {
             throw new Error(errorData.detail || `Migration failed: ${response.statusText}`);
         }
 
+        return response.json();
+    },
+
+    async getConfig(): Promise<ConfigResponse> {
+        const response = await fetch(`${API_BASE_URL}/config`);
+        if (!response.ok) {
+            throw new Error("Failed to fetch config");
+        }
         return response.json();
     }
 };

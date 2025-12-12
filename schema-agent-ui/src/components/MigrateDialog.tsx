@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Database, AlertTriangle, Loader2, CheckCircle, ExternalLink } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Database, AlertTriangle, Loader2, CheckCircle, ExternalLink, Lock, Unlock } from 'lucide-react';
+import { api } from '../services/api';
 
 interface MigrateDialogProps {
   isOpen: boolean;
@@ -17,6 +18,18 @@ export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrati
   const [projectId, setProjectId] = useState('');
   const [instanceId, setInstanceId] = useState('');
   const [databaseId, setDatabaseId] = useState('');
+  const [isProjectLocked, setIsProjectLocked] = useState(true);
+  const [isInstanceLocked, setIsInstanceLocked] = useState(true);
+
+  // Fetch defaults when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      api.getConfig().then(config => {
+        setProjectId(config.spanner_project_id);
+        setInstanceId(config.spanner_instance_id);
+      }).catch(err => console.error("Failed to load config defaults", err));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -78,7 +91,7 @@ export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrati
         className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-white/10"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-zinc-800 bg-zinc-950/50">
+        <div className="p-6 border-b border-zinc-800 bg-zinc-950/50 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-indigo-500/10 rounded-lg">
               <Database className="text-indigo-400" size={24} />
@@ -93,26 +106,46 @@ export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrati
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="space-y-2">
             <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Project ID</label>
-            <input
-              type="text"
-              value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              placeholder="my-gcp-project"
-              className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 placeholder:text-zinc-600"
-              disabled={isMigrating}
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                placeholder="my-gcp-project"
+                className={`w-full pl-4 pr-10 py-2 bg-zinc-950 border rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder:text-zinc-600 transition-colors ${isProjectLocked ? "border-zinc-800 opacity-60 cursor-not-allowed" : "border-zinc-700 focus:border-indigo-500/50"}`}
+                disabled={isMigrating || isProjectLocked}
+              />
+              <button
+                type="button"
+                onClick={() => setIsProjectLocked(!isProjectLocked)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                disabled={isMigrating}
+              >
+                {isProjectLocked ? <Lock size={14} /> : <Unlock size={14} />}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
             <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Instance ID</label>
-            <input
-              type="text"
-              value={instanceId}
-              onChange={(e) => setInstanceId(e.target.value)}
-              placeholder="my-spanner-instance"
-              className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 placeholder:text-zinc-600"
-              disabled={isMigrating}
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={instanceId}
+                onChange={(e) => setInstanceId(e.target.value)}
+                placeholder="my-spanner-instance"
+                className={`w-full pl-4 pr-10 py-2 bg-zinc-950 border rounded-lg text-sm text-zinc-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder:text-zinc-600 transition-colors ${isInstanceLocked ? "border-zinc-800 opacity-60 cursor-not-allowed" : "border-zinc-700 focus:border-indigo-500/50"}`}
+                disabled={isMigrating || isInstanceLocked}
+              />
+              <button
+                type="button"
+                onClick={() => setIsInstanceLocked(!isInstanceLocked)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                disabled={isMigrating}
+              >
+                {isInstanceLocked ? <Lock size={14} /> : <Unlock size={14} />}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">

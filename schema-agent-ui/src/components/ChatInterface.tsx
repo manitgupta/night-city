@@ -220,7 +220,11 @@ export function ChatInterface() {
             <Send size={14} />
           </button>
         </div>
+        <p className="text-center text-[10px] text-zinc-600 mt-2 font-medium">
+          Gemini can make mistakes, so double-check its output
+        </p>
       </div>
     </div>
   );
 }
+

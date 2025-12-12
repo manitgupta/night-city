@@ -44,10 +44,11 @@ The agent is prompted to follow a rigid "Principal Engineer" workflow:
 - Python 3.10+
 - Node.js 16+
 - Google Cloud Project with Spanner API enabled (for verification)
+- Docker (optional, for containerized run)
 
 ### 1. Environment Configuration
 
-Create a `.env` file in this root directory with the following variables:
+Create a `.env` file in the root directory (or ensure these variables are set in your environment/Cloud Run configuration). **These are mandatory for the application to start.**
 
 ```env
 # Google Cloud Configuration
@@ -55,11 +56,14 @@ SPANNER_PROJECT_ID="your-project-id"
 SPANNER_INSTANCE_ID="your-instance-id"
 
 # Model Configuration
-GOOGLE_API_KEY="your-gemini-api-key"
+GEMINI_API_KEY="your-gemini-api-key"
 ```
 
-### 2. Backend Setup
+### 2. Running Locally (Development)
 
+Run backend and frontend separately for hot-reloading development.
+
+#### Backend
 ```bash
 cd schema-agent-backend
 python -m venv venv
@@ -67,16 +71,43 @@ source venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8001
 ```
-The backend will start at `http://localhost:8001`.
 
-### 3. Frontend Setup
-
+#### Frontend
 ```bash
 cd schema-agent-ui
 npm install
 npm run dev
 ```
-The frontend will start at `http://localhost:5173` (or similar).
+
+### 3. Running Locally (Docker)
+
+You can build and run the entire application as a single container.
+
+```bash
+# Build the image
+docker build -t night-city .
+
+# Run the container (passing env vars from your .env file)
+docker run --env-file .env -p 8080:8080 night-city
+```
+The app will be available at `http://localhost:8080`.
+
+### 4. Deploying to Google Cloud Run
+
+Night City is optimized for Cloud Run. Specify your environment variables during deployment.
+
+```bash
+# Set your project
+gcloud config set project YOUR_PROJECT_ID
+
+# Deploy
+gcloud run deploy night-city \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="GEMINI_API_KEY=your-key,SPANNER_PROJECT_ID=your-project,SPANNER_INSTANCE_ID=your-instance"
+```
+Once deployed, click the generated URL to start using Night City.
 
 ## 💡 Usage Guide
 
