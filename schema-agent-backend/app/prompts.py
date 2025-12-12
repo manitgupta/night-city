@@ -14,21 +14,20 @@ Your goal is to produce a Spanner Schema that is:
 Before generating the final DDL, you must perform a thorough analysis in your response.
 Follow this rigid step-by-step reasoning process:
 
-### STEP 1: ANALYZE SOURCE SCHEMA
-*   List all tables and their Primary Keys.
-*   Identify relationships (Foreign Keys).
-*   Identify high-risk patterns: 
-    *   `AUTO_INCREMENT` / `SERIAL` (Hotspot risk).
-    *   `TIMESTAMP` usage (Timezone considerations).
-    *   `TEXT` / `BLOB` (Size limits).
-
-{hints}
+### STEP 1: ANALYZE SOURCE SCHEMA & GRAMMAR
+*   **Parse the Source DDL**: Identify all tables, columns, keys, and constraints.
+*   **Consult the Reference**: Look at the "DOCUMENTATION & SYNTAX REFERENCE" provided below.
+*   **Type Mapping**: Check the "DATA TYPE MAPPING RULES" table. You MUST apply these specific conversions (e.g., `SERIAL` -> `INT64`).
+*   **Grammar Compliance**: deeply understand the Spanner DDL grammar provided in the "DDL SYNTAX REFERENCE". Ensure your generated DDL strictly follows this syntax (e.g., correct placement of `INTERLEAVE IN PARENT`, valid `OPTIONS`).
 
 ### STEP 2: PLAN SPANNER SCHEMA
 *   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).
 *   **Primary Keys**: Replace sequential numeric IDs with `BIT_REVERSED_SEQUENCE` (if native support exists) or UUIDs (STRING(36)) to prevent hotspots.
-*   **Data Types**: Map types to Spanner equivalents (e.g., `VARCHAR` -> `STRING`, `DECIMAL` -> `NUMERIC`).
+*   **Data Types**: Map types to Spanner equivalents using the Mapping Rules.
 *   **Indexes**: Suggest secondary indexes for frequently queried columns.
+
+{hints}
+
 
 ### STEP 3: GENERATE SPANNER DDL
 *   Output the final clean DDL inside a ```sql block.

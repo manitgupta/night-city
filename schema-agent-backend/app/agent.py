@@ -41,13 +41,15 @@ class SchemaAgentService:
         logs = []
         logger.info(f"Starting conversion for dialect: {dialect}, verify_ddl={verify_ddl}")
         
-        # Get Key Hints based on Source DDL
+        # Get Key Hints based on Source DDL and Dialect
         raw_hints = context_manager.get_hints(source_ddl)
-        formatted_hints = context_manager.format_hints_for_prompt(raw_hints)
+        mapping_rules = context_manager.get_mapping_rules(dialect)
+        
+        formatted_hints = context_manager.format_hints_for_prompt(raw_hints, mapping_rules)
         
         if formatted_hints:
-            logger.info(f"Found {len(raw_hints)} hints for context injection.")
-            logs.append(f"Injected {len(raw_hints)} context hints into prompt.")
+            logger.info(f"Found {len(raw_hints)} hints and {len(mapping_rules)} mapping rules for context injection.")
+            logs.append(f"Injected {len(raw_hints)} hints and {len(mapping_rules)} mapping rules into prompt.")
         else:
             logger.info("No specific hints found.")
         

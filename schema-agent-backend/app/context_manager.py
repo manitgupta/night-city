@@ -1,9 +1,10 @@
 from typing import List, Dict
-from app.knowledge_base import SPANNER_KNOWLEDGE_BASE
+from app.knowledge_base import SPANNER_KNOWLEDGE_BASE, MAPPING_RULES
 
 class ContextManager:
     def __init__(self):
         self.kb = SPANNER_KNOWLEDGE_BASE
+        self.mappings = MAPPING_RULES
 
     def get_hints(self, source_ddl: str) -> List[Dict[str, str]]:
         """
@@ -28,20 +29,43 @@ class ContextManager:
         
         return hints
 
-    def format_hints_for_prompt(self, hints: List[Dict[str, str]]) -> str:
+    def get_mapping_rules(self, dialect: str) -> List[Dict[str, str]]:
         """
-        Formats the hints into a string block for the LLM prompt.
+        Returns mapping rules for the specific dialect.
         """
-        if not hints:
+        # Normalize dialect name (e.g. "postgres" -> "PostgreSQL")
+        d = dialect.lower()
+        if "postgres" in d:
+            return self.mappings.get("PostgreSQL", [])
+        elif "mysql" in d:
+            return self.mappings.get("MySQL", [])
+        return []
+
+    def format_hints_for_prompt(self, hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]] = None) -> str:
+        """
+        Formats the hints and mapping rules into a string block for the LLM prompt.
+        """
+        if not hints and not mapping_rules:
             return ""
             
         block = "### DOCUMENTATION & SYNTAX REFERENCE (Based on Source Patterns)\n"
-        block += "Use the following official Spanner DDL syntax definitions to guide your conversion:\n\n"
         
-        for i, hint in enumerate(hints, 1):
-            block += f"#### {i}. {hint['topic']}\n"
-            block += f"{hint['rule']}\n"
-            block += f"```sql\n{hint['syntax'].strip()}\n```\n\n"
+        if mapping_rules:
+             block += "#### 1. DATA TYPE MAPPING RULES (Deterministic)\n"
+             block += "You MUST apply the following type conversions:\n"
+             block += "| Source Type | Spanner Type | Notes |\n"
+             block += "|---|---|---|\n"
+             for rule in mapping_rules:
+                 block += f"| `{rule['source_type']}` | `{rule['spanner_type']}` | {rule['note']} |\n"
+             block += "\n"
+
+        if hints:
+            block += "#### 2. DDL SYNTAX REFERENCE\n"
+            block += "Use the following official Spanner DDL syntax definitions. **You must strictly adhere to this grammar.**\n\n"
+            for i, hint in enumerate(hints, 1):
+                block += f"**{hint['topic']}**\n"
+                block += f"{hint['rule']}\n"
+                block += f"```sql\n{hint['syntax'].strip()}\n```\n\n"
             
         return block
 

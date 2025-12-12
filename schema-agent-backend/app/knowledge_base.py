@@ -109,3 +109,27 @@ MAX for BYTES is 10,485,760 bytes.
         "priority": "HIGH"
     }
 ]
+
+# Deterministic Mapping Rules from Spanner Migration Tool
+# Source: https://github.com/GoogleCloudPlatform/spanner-migration-tool
+MAPPING_RULES = {
+    "PostgreSQL": [
+        {"source_type": "SERIAL / BIGSERIAL", "spanner_type": "INT64", "note": "Use BIT_REVERSED_SEQUENCE or UUID (STRING(36)) to avoid hotspots."},
+        {"source_type": "TEXT", "spanner_type": "STRING(MAX)", "note": "Spanner has no TEXT type."},
+        {"source_type": "VARCHAR(n)", "spanner_type": "STRING(n)", "note": ""},
+        {"source_type": "NUMERIC", "spanner_type": "NUMERIC", "note": "Spanner NUMERIC precision is (38,9). Verification needed if higher precision required."},
+        {"source_type": "TIMESTAMP", "spanner_type": "TIMESTAMP", "note": "Stored in UTC."},
+        {"source_type": "JSON / JSONB", "spanner_type": "JSON", "note": ""},
+        {"source_type": "BYTEA", "spanner_type": "BYTES(MAX)", "note": ""}
+    ],
+    "MySQL": [
+        {"source_type": "TINYINT / SMALLINT / INT / BIGINT", "spanner_type": "INT64", "note": "All integers map to INT64."},
+        {"source_type": "AUTO_INCREMENT", "spanner_type": "INT64", "note": "Use BIT_REVERSED_SEQUENCE or UUID to avoid hotspots."},
+        {"source_type": "TEXT / LONGTEXT", "spanner_type": "STRING(MAX)", "note": ""},
+        {"source_type": "VARCHAR(n)", "spanner_type": "STRING(n)", "note": ""},
+        {"source_type": "DECIMAL", "spanner_type": "NUMERIC", "note": "Check precision limits (38,9)."},
+        {"source_type": "TIMESTAMP / DATETIME", "spanner_type": "TIMESTAMP", "note": "Timezone handling differs."},
+        {"source_type": "BLOB", "spanner_type": "BYTES(MAX)", "note": ""},
+        {"source_type": "SET", "spanner_type": "ARRAY<STRING>", "note": "Validation dropped."}
+    ]
+}
