@@ -7,6 +7,9 @@ from typing import Optional, Dict, Any, List
 from google.cloud import spanner
 from google.api_core import exceptions
 
+
+from fastapi import BackgroundTasks
+
 logger = logging.getLogger(__name__)
 
 class SpannerVerificationTool:
@@ -31,7 +34,7 @@ class SpannerVerificationTool:
                 self.client = None
                 self.instance = None
 
-    async def verify_ddl(self, ddl: str) -> Dict[str, Any]:
+    async def verify_ddl(self, ddl: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
         """
         Verifies the given DDL by attempting to create a temporary database in Spanner.
         Returns a dictionary with 'valid': bool, 'errors': list[str].
@@ -50,6 +53,9 @@ class SpannerVerificationTool:
         
         loop = asyncio.get_running_loop()
         
+        # Schedule cleanup to run after the response is sent
+        background_tasks.add_task(self._drop_db_background, database_id)
+
         try:
             # Simple splitting by ';' might be fragile if ';' is in comments or strings.
             # For now, we assume standard valid DDL scripts.
@@ -59,7 +65,7 @@ class SpannerVerificationTool:
                  return {"valid": False, "errors": ["No DDL statements found."]}
 
             # We'll run the creation logic in a separate thread to avoid blocking the event loop
-            await loop.run_in_executor(None, self._create_and_drop_db, database_id, ddl_statements)
+            await loop.run_in_executor(None, self._create_db_sync, database_id, ddl_statements)
             
             return {"valid": True, "errors": []}
 
@@ -76,10 +82,16 @@ class SpannerVerificationTool:
             # Clean generic exception message
             logger.error(f"Unexpected error during verification: {e}")
             return {"valid": False, "errors": [f"Unexpected Error: {str(e)}"]}
+        # Note: No 'finally' block needed for cleanup because generic background task handles it?
+        # WAIT: If creation fails, we still want to drop it if it was partially created.
+        # Actually, adding the task to background_tasks ensures it runs AFTER the response is sent.
+        # So even if we return early with an error, FastAPI will run the background task.
+        # BUT, if we return early (e.g. "No DDL statements found"), we might not even have created it.
+        # _drop_db_background handles NotFound, so it's safe to always run it.
 
-    def _create_and_drop_db(self, database_id: str, ddl_statements: List[str]):
+    def _create_db_sync(self, database_id: str, ddl_statements: List[str]):
         """
-        Synchronous helper to create and then drop the database.
+        Synchronous helper to create the database.
         """
         database = self.instance.database(database_id, ddl_statements=ddl_statements)
         
@@ -90,19 +102,23 @@ class SpannerVerificationTool:
             operation.result(timeout=120)  # 2 minutes timeout should be enough for metadata only
             logger.info(f"Database {database_id} created successfully. DDL is valid.")
         except Exception as e:
-            # Re-raise to be caught by the async wrapper
             raise e
-        finally:
-            # CLEANUP: Always try to drop the database
-            try:
-                # Convert database object to one that we can reload/drop? 
-                # database.drop() exists on the object.
-                database.drop()
-                logger.info(f"Database {database_id} dropped.")
-            except exceptions.NotFound:
-                pass # It wasn't created, perfectly fine
-            except Exception as drop_error:
-                logger.error(f"Failed to drop temp database {database_id}: {drop_error}")
+
+    def _drop_db_background(self, database_id: str):
+        """
+        Background task to drop the temp database.
+        """
+        if not self.instance:
+            return
+
+        try:
+            database = self.instance.database(database_id)
+            database.drop()
+            logger.info(f"Database {database_id} dropped successfully (async cleanup).")
+        except exceptions.NotFound:
+            pass # It wasn't created, perfectly fine
+        except Exception as drop_error:
+            logger.error(f"Failed to drop temp database {database_id} in background: {drop_error}")
 
 
 class SpannerMigrationTool:

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from app.agent import agent_service
@@ -70,11 +70,11 @@ class MigrateResponse(BaseModel):
     database_uri: str = ""
 
 @app.post("/validate")
-async def validate_ddl(request: ValidateRequest):
+async def validate_ddl(request: ValidateRequest, background_tasks: BackgroundTasks):
     try:
         from app.tools import SpannerVerificationTool
         verifier = SpannerVerificationTool()
-        result = await verifier.verify_ddl(request.ddl)
+        result = await verifier.verify_ddl(request.ddl, background_tasks)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
