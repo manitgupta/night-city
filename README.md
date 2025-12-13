@@ -2,7 +2,7 @@
 
 **Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a slick, developer-focused UI to make schema migration interactive and seamless.
 
-![Demo](schema-agent-ui/assets/chat_diff_demo.webp)
+![Demo](schema-agent-ui/assets/night-city-demo.gif)
 
 ## 🚀 Key Features
 
