@@ -1,15 +1,14 @@
 # <img src="schema-agent-ui/assets/logo.png" width="48" height="48" style="vertical-align: middle;" /> Night City: Agentic Spanner Schema Converter
 
-**Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a slick, developer-focused UI to make database migration valid, interactive, and seamless.
+**Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a slick, developer-focused UI to make schema migration interactive and seamless.
 
 ![Demo](schema-agent-ui/assets/chat_diff_demo.webp)
 
 ## 🚀 Key Features
 
 - **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* your schema.
-- **Human-in-the-Loop**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
-- **On-Demand Verification**: Integrates with a live Spanner instance to validate DDL against actual database constraints.
-- **Analyze & Fix Loop**: If validation fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject in a IDE-like, diff-based editor.
+- **IDE-like Experience**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
+- **Analyze & Fix Loop**: LLMs work best on feedback (from both humans and compilers!). Validate -> Repair flow allows you to review and accept/reject agent-proposed fixes to iteratively reach to a syntactly correct schema when the model gets it wrong in the first attempt. If validation fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject in a IDE-like, diff-based editor
 - **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
 - **Agent Chat & Schema Refinement**: Ask questions or request schema changes (e.g., "Rename `id` to `user_id`"). The agent proposes changes via a "Review" button, letting you visualize diffs before accepting.
 
