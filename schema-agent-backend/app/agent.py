@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from google.adk import Agent
 from google.genai import types
+from google import genai
 from toolbox_core import ToolboxClient
 
 
@@ -26,6 +27,12 @@ class SchemaAgentService:
             model=self.model_name,
             static_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL. You MUST IGNORE database-level commands (CREATE DATABASE, USE, etc) and focus only on schema objects.",
         )
+        # Initialize Gemini Client once (Singleton)
+        # Check API key existence? It's done in main.py but good to be safe.
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.error("GEMINI_API_KEY not found in environment variables during AgentService init.")
+        self.client = genai.Client(api_key=api_key)
         self.active_chats: Dict[str, Any] = {}
 
     @classmethod
@@ -61,17 +68,27 @@ class SchemaAgentService:
         
         # Call Agent
         logger.info(f"Sending prompt to agent")
-        # Direct generation call to avoid chat tools/system logic which is for interactive mode
-        from google import genai
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
-        response = client.models.generate_content(
-            model=self.model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.1 # Low temp for code
+        try:
+            # Use shared client with timeout
+            # Note: config is for generation config, timeout is usually a method argument in google-genai
+            # We set a generous 300s (5 min) timeout as requested.
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1 # Low temp for code
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Gemini API call failed in convert_schema: {str(e)}", exc_info=True)
+            # Re-raise or return error? The logs expects a list.
+            logs.append(f"CRITICAL ERROR: Gemini API call failed: {str(e)}")
+            return {
+                "converted_ddl": "",
+                "logs": logs,
+                "report": f"Conversion failed due to API error: {str(e)}"
+            }
         
         response_text = response.text
         # Log the thought process briefly (or full debug)
@@ -132,35 +149,36 @@ class SchemaAgentService:
 
         tools = [suggest_changes]
 
-        from google import genai
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        
-        # We need to act as a proxy for the chat session vs single turn
-        # For simplicity in this stateless API, we'll treat it as a single turn with history if we had it,
-        # but here we just send the full prompt.
         
         # ACTUALLY, to use tools effectively with the new SDK, we should use the chat context or generate_content
         # Let's use generate_content with tools config
         
-        response = client.models.generate_content(
-            model=self.model_name,
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
-                tools=tools,
-                system_instruction="""You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. 
-                
-                YOUR GOAL: Provide clear, correct Spanner DDL. 
-                
-                RULES:
-                1. IGNORE database-level commands (CREATE DATABASE, USE, etc).
-                2. Focus only on schema objects.
-                3. CRITICAL: If the user requests ANY change to the schema (e.g., rename column, change type, add table, fix error), you MUST use the 'suggest_changes' tool. 
-                4. IMPORTANT: If you use the tool, ALSO output the full valid Spanner DDL in the text response as a markdown block. This ensures the user sees the code.
-                5. If the user is just asking a question (e.g., "why is this INT64?"), answer normally key text.
-                """,
-                temperature=0.1 # Low temp for code
+        try:
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
+                    tools=tools,
+                    system_instruction="""You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. 
+                    
+                    YOUR GOAL: Provide clear, correct Spanner DDL. 
+                    
+                    RULES:
+                    1. IGNORE database-level commands (CREATE DATABASE, USE, etc).
+                    2. Focus only on schema objects.
+                    3. CRITICAL: If the user requests ANY change to the schema (e.g., rename column, change type, add table, fix error), you MUST use the 'suggest_changes' tool. 
+                    4. IMPORTANT: If you use the tool, ALSO output the full valid Spanner DDL in the text response as a markdown block. This ensures the user sees the code.
+                    5. If the user is just asking a question (e.g., "why is this INT64?"), answer normally key text.
+                    """,
+                    temperature=0.1 # Low temp for code
+                )
             )
-        )
+        except Exception as e:
+            logger.error(f"Gemini API call failed in chat: {str(e)}", exc_info=True)
+            return {
+                "response": f"I encountered an error communicating with the model: {str(e)}",
+                "suggested_fix": None
+            }
 
         # Check for tool calls
         suggested_fix = None
@@ -265,17 +283,21 @@ class SchemaAgentService:
             error_message=error_message
         )
         
-        from google import genai
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-        
-        chat = client.chats.create(
-            model=self.model_name,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json" 
+        try:
+            chat = self.client.chats.create(
+                model=self.model_name,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json" 
+                )
             )
-        )
-        response = chat.send_message(prompt)
-        text = response.text
+            response = chat.send_message(prompt)
+            text = response.text
+        except Exception as e:
+            logger.error(f"Gemini API call failed in analyze_fix: {str(e)}", exc_info=True)
+            return {
+                "explanation": f"Error analyzing fix: {str(e)}",
+                "fixed_ddl": generated_ddl
+            }
         
         try:
             # Clean potential markdown
