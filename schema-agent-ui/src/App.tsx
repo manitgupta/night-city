@@ -406,7 +406,20 @@ function App() {
                     {isSourceLocked ? <Lock size={14} /> : <Unlock size={14} />}
                   </button>
 
-                  {sourceCode.trim() && (
+                  <div className="mx-2"></div>
+
+                  {/* Line Count Warning */}
+                  {sourceCode.split('\n').length > 1000 && (
+                    <div className="relative group flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-full text-xs font-medium text-red-400 animate-in fade-in slide-in-from-right-4">
+                      <AlertCircle size={14} />
+                      <span>Too Large ({sourceCode.split('\n').length} lines)</span>
+                      <div className="absolute top-full right-0 mt-2 w-64 p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-400 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 hidden md:block">
+                        Source SQL exceeds the 1000-line limit. Please reduce the size to proceed.
+                      </div>
+                    </div>
+                  )}
+
+                  {sourceCode.trim() && sourceCode.split('\n').length <= 1000 && (
                     <button
                       id="convert-button"
                       onClick={handleConvert}
