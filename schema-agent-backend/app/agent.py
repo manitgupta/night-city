@@ -61,7 +61,19 @@ class SchemaAgentService:
         
         # Call Agent
         logger.info(f"Sending prompt to agent")
-        response_text = await self.chat(prompt)
+        # Direct generation call to avoid chat tools/system logic which is for interactive mode
+        from google import genai
+        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+        
+        response = client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.1 # Low temp for code
+            )
+        )
+        
+        response_text = response.text
         # Log the thought process briefly (or full debug)
         logger.info("Received response from agent")
         
@@ -82,7 +94,7 @@ class SchemaAgentService:
             "report": report
         }
 
-    async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> str:
+    async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         # Same chat logic, just ensuring imports are correct
         # ... (keeping existing chat logic mostly as is, just ensuring prompt flow works)
         logger.info(f"Received chat message: {message[:50]}...")
@@ -106,17 +118,138 @@ class SchemaAgentService:
         USER QUERY: {message}
         """
 
+        # Define the tool for the model
+        def suggest_changes(explanation: str, fixed_ddl: str):
+            """
+            Propose changes to the Spanner DDL.
+            Use this tool when the user asks to modify the schema (e.g. rename columns, change types, add tables).
+            
+            Args:
+                explanation: A clear explanation of what changes were made and why.
+                fixed_ddl: The complete, valid Spanner DDL matching the new requirements.
+            """
+            return {"explanation": explanation, "fixed_ddl": fixed_ddl}
+
+        tools = [suggest_changes]
+
         from google import genai
         client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         
-        chat = client.chats.create(
+        # We need to act as a proxy for the chat session vs single turn
+        # For simplicity in this stateless API, we'll treat it as a single turn with history if we had it,
+        # but here we just send the full prompt.
+        
+        # ACTUALLY, to use tools effectively with the new SDK, we should use the chat context or generate_content
+        # Let's use generate_content with tools config
+        
+        response = client.models.generate_content(
             model=self.model_name,
+            contents=full_prompt,
             config=types.GenerateContentConfig(
-                system_instruction="You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. You provide clear, correct Spanner DDL. You MUST IGNORE database-level commands (CREATE DATABASE, USE, etc) and focus only on schema objects."
+                tools=tools,
+                system_instruction="""You are an expert Database Engineer specialized in migrating SQL schemas to Google Cloud Spanner. 
+                
+                YOUR GOAL: Provide clear, correct Spanner DDL. 
+                
+                RULES:
+                1. IGNORE database-level commands (CREATE DATABASE, USE, etc).
+                2. Focus only on schema objects.
+                3. CRITICAL: If the user requests ANY change to the schema (e.g., rename column, change type, add table, fix error), you MUST use the 'suggest_changes' tool. 
+                4. IMPORTANT: If you use the tool, ALSO output the full valid Spanner DDL in the text response as a markdown block. This ensures the user sees the code.
+                5. If the user is just asking a question (e.g., "why is this INT64?"), answer normally key text.
+                """,
+                temperature=0.1 # Low temp for code
             )
         )
-        response = chat.send_message(full_prompt)
-        return response.text
+
+        # Check for tool calls
+        suggested_fix = None
+        response_text = ""
+
+        # Handle potentially multiple parts, but usually it's text then function call or just function call
+        if response.function_calls:
+            for fc in response.function_calls:
+                if fc.name == "suggest_changes":
+                    args = fc.args
+                    suggested_fix = {
+                        "explanation": args["explanation"],
+                        "fixed_ddl": args["fixed_ddl"]
+                    }
+                    if not response_text:
+                        response_text = f"I've analyzed your request. {args['explanation']}"
+        
+        if response.text:
+            response_text = response.text
+            
+            # Fallback: If no tool call but we have DDL in text, treat it as a suggestion
+            if not suggested_fix:
+                extracted_ddl = self._extract_sql(response_text)
+                # Ensure it's not just the same text or empty
+                if extracted_ddl and len(extracted_ddl) > 20 and "CREATE TABLE" in extracted_ddl.upper():
+                    suggested_fix = {
+                        "explanation": "Please review the changes.",
+                        "fixed_ddl": extracted_ddl
+                    }
+
+        # If we got a function call, we should ideally return that structured data
+        # BUT our chat API returns a string or struct.
+        # We updated ChatResponse model to have optional suggested_fix.
+        
+        from app.models import SuggestedFix
+        
+        fix_obj = None
+        if suggested_fix:
+            fix_obj = SuggestedFix(**suggested_fix)
+
+        if suggested_fix and response_text:
+            # Clean up the response text: Remove the DDL block to avoid pollution
+            # We already have the DDL in suggested_fix
+            import re
+            # Remove ```sql ... ``` or ``` ... ``` blocks that contain CREATE/ALTER
+            # This logic mimics _extract_sql but for removal
+            
+            # Simple approach: Remove the extracted DDL string if it exists in the text
+            if isinstance(suggested_fix, dict):
+                 params = suggested_fix
+            else:
+                 params = suggested_fix.model_dump() # access fields if pydantic
+            
+            fixed_ddl = params.get("fixed_ddl", "")
+            
+            if fixed_ddl:
+                # Use regex to find the block containing this specific DDL, handling variations in whitespace/ticks
+                # escape the DDL for use in regex
+                escaped_ddl = re.escape(fixed_ddl.strip())
+                # Pattern: ```(optional sql) \s* DDL \s* ```
+                # We use specific DDL match to avoid removing wrong blocks if there are multiple (unlikely but safe)
+                # We need to account that fixed_ddl might have been stripped max block, so we match loosely on whitespace
+                
+                # Actually, simpler: just remove valid code blocks that look like DDL if we have a suggested fix.
+                # But let's try to remove the specific one first.
+                
+                pattern = r"```(?:sql)?\s*" + escaped_ddl + r"\s*```"
+                
+                # Check if it matches
+                if re.search(pattern, response_text, re.DOTALL):
+                     response_text = re.sub(pattern, "", response_text, flags=re.DOTALL)
+                else:
+                     # Fallback: if exact match fails (whitespace issues), fallback to string replace of content
+                     # THEN remove empty blocks
+                     if fixed_ddl in response_text:
+                         response_text = response_text.replace(fixed_ddl, "")
+                     
+                     # aggressive cleanup of empty/near-empty DDL blocks
+                     response_text = re.sub(r"```(?:sql)?\s*```", "", response_text)
+                     # cleanup blocks that only contain whitespace
+                     response_text = re.sub(r"```(?:sql)?\s+\n\s*```", "", response_text)
+
+            # Cleanup "Here is..." text if it's trailing
+            response_text = re.sub(r"Here is the updated (?:Spanner )?DDL.*?:?\s*$", "", response_text.strip(), flags=re.IGNORECASE)
+
+        return {
+            "response": response_text.strip() or "I've proposed a change based on your request.",
+            "suggested_fix": fix_obj
+        }
 
     async def analyze_fix(self, source_ddl: str, generated_ddl: str, error_message: str) -> Dict[str, str]:
         """

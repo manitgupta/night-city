@@ -30,6 +30,15 @@ interface AppState {
   setSelection: (selection: AppState['selection']) => void;
   addMessage: (message: Message) => void;
   setAgentTyping: (typing: boolean) => void;
+
+  // Review State (Global)
+  reviewState: {
+    isActive: boolean;
+    originalCode: string;
+    modifiedCode: string;
+    explanation: string;
+  };
+  setReviewState: (state: AppState['reviewState']) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -49,5 +58,13 @@ export const useStore = create<AppState>((set) => ({
   setOutputCode: (code) => set({ outputCode: code }),
   setSelection: (selection) => set({ selection }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
-  setAgentTyping: (typing) => set({ isAgentTyping: typing }),
+  setAgentTyping: (typing: boolean) => set({ isAgentTyping: typing }),
+
+  reviewState: {
+    isActive: false,
+    originalCode: "",
+    modifiedCode: "",
+    explanation: ""
+  },
+  setReviewState: (reviewState) => set({ reviewState }),
 }));

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, Code2, Check } from "lucide-react";
+import { Send, Bot, User, Sparkles, Code2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, Message } from "../store";
 import { api } from "../services/api";
@@ -39,16 +39,25 @@ export function ChatInterface() {
 
     try {
       // Pass full context to backend
-      const responseText = await api.chat(input, sourceCode, outputCode, selection);
+      const responseData = await api.chat(input, sourceCode, outputCode, selection);
 
-      addMessage({
+      // Create message with optional suggested fix
+      // If suggest_fix is present, we map it to store's Message format if needed, 
+      // or just store it in the message content as metadata? 
+      // The Store Message interface has suggestedFix optional prop.
+
+      const newMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'agent',
-        content: responseText
-      });
+        content: responseData.response,
+        suggestedFix: responseData.suggested_fix ? {
+          description: responseData.suggested_fix.explanation,
+          newCode: responseData.suggested_fix.fixed_ddl,
+          target: 'output' // Default to output for DDL changes from chat
+        } : undefined
+      };
 
-      // We can add logic here to parse 'suggestedFix' from response if the Agent returns structured data
-      // For now, the backend returns raw text, so we display it directly.
+      addMessage(newMsg);
 
     } catch (error) {
       console.error("Chat error:", error);
@@ -62,22 +71,14 @@ export function ChatInterface() {
     }
   };
 
-  const handleApplyFix = (fix: NonNullable<Message['suggestedFix']>) => {
-    if (fix.target === 'source') {
-      useStore.getState().setSourceCode(fix.newCode);
-      addMessage({
-        id: Date.now().toString(),
-        role: 'agent',
-        content: "Fix applied to Source Schema! 🚀"
-      });
-    } else if (fix.target === 'output') {
-      useStore.getState().setOutputCode(fix.newCode);
-      addMessage({
-        id: Date.now().toString(),
-        role: 'agent',
-        content: "Fix applied to Spanner Output! 🚀"
-      });
-    }
+  const handleReviewFix = (fix: NonNullable<Message['suggestedFix']>) => {
+    // Trigger global review state
+    useStore.getState().setReviewState({
+      isActive: true,
+      originalCode: useStore.getState().outputCode,
+      modifiedCode: fix.newCode,
+      explanation: fix.description
+    });
   };
 
   return (
@@ -127,7 +128,7 @@ export function ChatInterface() {
                           <SyntaxHighlighter
                             {...rest}
                             PreTag="div"
-                            children={String(children).replace(/\n$/, '')}
+                            children={children ? String(children).replace(/\n$/, '') : ''}
                             language={match[1]}
                             style={vscDarkPlus}
                             customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b' }}
@@ -155,10 +156,10 @@ export function ChatInterface() {
                       {msg.suggestedFix.description}
                     </div>
                     <button
-                      onClick={() => handleApplyFix(msg.suggestedFix!)}
+                      onClick={() => handleReviewFix(msg.suggestedFix!)}
                       className="flex items-center justify-center gap-2 w-full py-1.5 bg-zinc-800 hover:bg-emerald-500/10 hover:text-emerald-400 text-zinc-300 text-xs font-medium rounded transition-all border border-zinc-700 hover:border-emerald-500/50"
                     >
-                      <Check size={12} /> Apply Fix
+                      <Code2 size={12} /> Review Changes
                     </button>
                   </div>
                 )}

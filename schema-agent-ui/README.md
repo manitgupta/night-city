@@ -19,7 +19,12 @@ A slick, dark-mode "pair programming" interface for converting SQL schemas to Cl
 - **Diff View Review**: When the agent proposes complex fixes (or analyzes a validation error), you can review changes in a dedicated **Diff View** (green/red highlights).
 - **Accept/Reject**: Seamlessly accept or reject proposed changes with one click.
 
-### 4. Real-time Verification & Migration
+### 4. Chat-Driven Schema Refinement
+- **Natural Language Editing**: Simply tell the agent to "Rename column `x` to `y`" or "Change logic to use UUIDs".
+- **Visual Confirmation**: The agent proposes a fix with a **"Review Changes"** button.
+- **Diff View**: Verifying the change in a visual diff editor before applying it to your schema.
+
+### 5. Real-time Verification & Migration
 - **On-Demand Verification**: Manually validate the DDL against a real Spanner instance to catch complex issues.
 - **Direct Migration**: Successfully validated schemas can be deployed to a new Spanner database via the "Migrate" button.
 - **Feedback**: Provides a slick loading overlay with status updates during the verification process.
@@ -44,6 +49,11 @@ Once a dialect is chosen, click "Convert" to generate the Spanner DDL.
 3. **Result**: Agent suggests correction -> User Applies.
 
 ![After Applying Fix](assets/apply_fix.png)
+
+### Chat-Driven Schema Refinement
+Ask the agent to make changes naturally, and review the proposed diffs.
+
+![Chat Diff Demo](assets/chat_diff_demo.webp)
 
 ## How to Run
 

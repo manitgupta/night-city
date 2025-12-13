@@ -24,14 +24,15 @@ function App() {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
-  const [isReviewing, setIsReviewing] = useState(false);
-  const [originalOutputCode, setOriginalOutputCode] = useState<string>("");
+
+  // Replaced local isReviewing/originalOutputCode with Store state
   const [showMigrateDialog, setShowMigrateDialog] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<{ success: boolean; database_uri: string; message: string; } | null>(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
-  const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode } = useStore();
+
+  const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState } = useStore();
 
   // Invalidate validation result when output code changes
   useEffect(() => {
@@ -55,9 +56,7 @@ function App() {
   };
 
   const closeValidationModal = () => {
-    if (isReviewing) return; // Prevent closing validation modal during review if we want to force a choice, or allow cancel. 
-    // Let's allow cancel but reset review state
-    setIsReviewing(false);
+    if (reviewState.isActive) return; 
     setShowValidationModal(false);
     setAnalysisResult(null);
   };
@@ -77,32 +76,48 @@ function App() {
 
   const startReview = () => {
     if (!analysisResult) return;
-    setOriginalOutputCode(outputCode);
-    setIsReviewing(true);
-  };
-
-  const acceptFix = () => {
-    if (!analysisResult) return;
-    setOutputCode(analysisResult.fixed_ddl);
-    setIsReviewing(false);
-    setOriginalOutputCode("");
-    setValidationResult(null);
-    setAnalysisResult(null);
-
-    // Create a summmary report
-    const fixReport = `## Fix Applied ✅\n\n${analysisResult.explanation}`;
-
-    addMessage({
-      id: Date.now().toString(),
-      role: 'agent',
-      content: fixReport,
-      isReport: true
+    setReviewState({
+      isActive: true,
+      originalCode: outputCode,
+      modifiedCode: analysisResult.fixed_ddl,
+      explanation: analysisResult.explanation
     });
   };
 
+  const acceptFix = () => {
+    if (reviewState.modifiedCode) {
+      setOutputCode(reviewState.modifiedCode);
+    }
+
+    // Create a summmary report if explanation exists
+    if (reviewState.explanation) {
+      const fixReport = `## Fix Applied ✅\n\nYour requested changes have been applied.`;
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: fixReport,
+        isReport: true
+      });
+    }
+
+    // Reset states
+    setReviewState({
+      isActive: false,
+      originalCode: "",
+      modifiedCode: "",
+      explanation: ""
+    });
+    setValidationResult(null);
+    setAnalysisResult(null);
+  };
+
   const rejectFix = () => {
-    setIsReviewing(false);
-    setOriginalOutputCode("");
+    setReviewState({
+      isActive: false,
+      originalCode: "",
+      modifiedCode: "",
+      explanation: ""
+    });
     setValidationResult(null);
     setAnalysisResult(null);
   };
@@ -198,21 +213,19 @@ function App() {
         isMigrating={isMigrating}
         migrationResult={migrationResult}
       />
-      {/* Validation Modal Overlay (Hidden when Reviewing) */}
-      {validationResult && showValidationModal && !isReviewing && (
+      {/* Validation Modal Overlay (Hidden when Reviewing from Validation flow, but we might want to unify this) 
+          If reviewState.isActive is true, we are in review mode. 
+          If validationResult is present, we might want to show it? 
+          Actually, when review is active (either from Validation or Chat), we hide the modal overlay for the Middle Panel to take focus.
+      */}
+      {validationResult && showValidationModal && !reviewState.isActive && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          {/* If Reviewing, show a smaller top-center modal or floating action bar? 
-              Actually, user said 'Accept/Reject button shows up along with the diff view'.
-              Let's keep the modal but make it minimal or move it.
-              Or, simply change the content of THIS modal to be the 'Control Center' for the review.
-          */}
           <div
             className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-white/10"
             onClick={(e) => e.stopPropagation()}
           >
-            {!isReviewing && (
+            {/* Always show this header in validation modal */}
             <div className={`px-6 py-4 flex items-center gap-3 border-b ${validationResult.valid ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`}>
-                {/* ... existing header ... */}
                 {validationResult.valid ? (
                   <CheckCircle className="text-emerald-400 shrink-0" size={24} />
                 ) : (
@@ -223,35 +236,8 @@ function App() {
                 </h3>
                 <button onClick={closeValidationModal} className="ml-auto text-zinc-400 hover:text-white transition-colors">✕</button>
               </div>
-            )}
-            {isReviewing ? (
-              // Review Mode UI
-              <div className="p-6 flex flex-col items-center gap-4">
-                <h3 className="text-xl font-semibold text-zinc-100">Review Proposed Fix</h3>
-                <p className="text-zinc-400 text-center text-sm">
-                  Review the changes in the Diff View on the right. <br />
-                  Green lines are additions, red lines are removals.
-                </p>
-                <div className="flex items-center gap-4 mt-2">
-                  <button
-                    onClick={rejectFix}
-                    className="flex items-center gap-2 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-red-400 rounded-lg font-medium transition-colors border border-zinc-700"
-                  >
-                    <ThumbsDown size={18} />
-                    Reject
-                  </button>
-                  <button
-                    onClick={acceptFix}
-                    className="flex items-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-medium shadow-lg shadow-emerald-500/20 transition-all"
-                  >
-                    <ThumbsUp size={18} />
-                    Accept Fix
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // Normal Analysis/Validation UI
-              <>
+
+            {/* Validation Content */}
             {analysisResult ? (
               <div className="p-6 bg-indigo-500/5 border-b border-indigo-500/10 animate-in slide-in-from-bottom-2">
                 <div className="flex items-center gap-2 mb-3 text-indigo-400 font-semibold">
@@ -261,7 +247,7 @@ function App() {
                 <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap">
                   {analysisResult.explanation}
                 </div>
-                      {!isReviewing && (
+                {!reviewState.isActive && (
                         <div className="mt-4 p-3 bg-zinc-950 rounded border border-zinc-800 font-mono text-xs text-zinc-500 text-center italic">
                           Click "Review Fix" to see the full diff and apply changes.
                   </div>
@@ -330,9 +316,6 @@ function App() {
                 Close
               </button>
             </div>
-              </>
-            )
-            }
           </div>
         </div>
       )}
@@ -449,16 +432,16 @@ function App() {
           {/* Middle Panel: Output */}
           <Panel defaultSize={40} minSize={20}>
             <SchemaEditor
-              title={isReviewing ? "Review Fix (Diff View)" : "Cloud Spanner DDL"} 
+              title={reviewState.isActive ? "Review Fix (Diff View)" : "Cloud Spanner DDL"} 
               type="output"
               showHint={true}
               readOnly={false} // Always editable/selectable per previous request
               isLoading={isConverting}
-              diffMode={isReviewing}
-              diffOriginal={originalOutputCode}
-              diffModified={analysisResult?.fixed_ddl || ""}
+              diffMode={reviewState.isActive}
+              diffOriginal={reviewState.originalCode}
+              diffModified={reviewState.modifiedCode}
               headerActions={
-                isReviewing ? (
+                reviewState.isActive ? (
                   <div className="flex items-center gap-2 mr-2">
                     <span className="text-xs text-zinc-400 mr-2">Reviewing Fix...</span>
                     <button

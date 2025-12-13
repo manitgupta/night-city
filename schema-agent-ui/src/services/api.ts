@@ -7,6 +7,10 @@ export interface ConversionResponse {
 
 export interface ChatResponse {
     response: string;
+    suggested_fix?: {
+        explanation: string;
+        fixed_ddl: string;
+    };
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8001" : "");
@@ -49,7 +53,7 @@ export const api = {
         return response.json();
     },
 
-    async chat(message: string, sourceCode?: string, outputCode?: string, selection?: any): Promise<string> {
+    async chat(message: string, source_ddl: string, output_ddl: string, selection: any): Promise<ChatResponse> {
         const response = await fetch(`${API_BASE_URL}/chat`, {
             method: "POST",
             headers: {
@@ -57,8 +61,8 @@ export const api = {
             },
             body: JSON.stringify({
                 message: message,
-                source_ddl: sourceCode,
-                output_ddl: outputCode,
+                source_ddl: source_ddl,
+                output_ddl: output_ddl,
                 selection: selection
             }),
         });
@@ -68,8 +72,7 @@ export const api = {
             throw new Error(errorData.detail || `Chat failed: ${response.statusText}`);
         }
 
-        const data: ChatResponse = await response.json();
-        return data.response;
+        return response.json();
     },
 
     async validateSpannerDDL(ddl: string): Promise<ValidationResponse> {

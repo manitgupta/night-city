@@ -16,8 +16,13 @@ class ChatRequest(BaseModel):
     output_ddl: Optional[str] = None
     selection: Optional[Dict[str, Any]] = None  # {code, startLine, endLine, source}
 
+class SuggestedFix(BaseModel):
+    explanation: str
+    fixed_ddl: str
+
 class ChatResponse(BaseModel):
     response: str
+    suggested_fix: Optional[SuggestedFix] = None
 
 class ValidateRequest(BaseModel):
     ddl: str
