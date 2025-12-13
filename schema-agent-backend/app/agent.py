@@ -210,9 +210,9 @@ class SchemaAgentService:
             
             # Simple approach: Remove the extracted DDL string if it exists in the text
             if isinstance(suggested_fix, dict):
-                 params = suggested_fix
+                params = suggested_fix
             else:
-                 params = suggested_fix.model_dump() # access fields if pydantic
+                params = suggested_fix.model_dump() # access fields if pydantic
             
             fixed_ddl = params.get("fixed_ddl", "")
             
@@ -231,17 +231,17 @@ class SchemaAgentService:
                 
                 # Check if it matches
                 if re.search(pattern, response_text, re.DOTALL):
-                     response_text = re.sub(pattern, "", response_text, flags=re.DOTALL)
+                    response_text = re.sub(pattern, "", response_text, flags=re.DOTALL)
                 else:
-                     # Fallback: if exact match fails (whitespace issues), fallback to string replace of content
-                     # THEN remove empty blocks
-                     if fixed_ddl in response_text:
-                         response_text = response_text.replace(fixed_ddl, "")
-                     
-                     # aggressive cleanup of empty/near-empty DDL blocks
-                     response_text = re.sub(r"```(?:sql)?\s*```", "", response_text)
-                     # cleanup blocks that only contain whitespace
-                     response_text = re.sub(r"```(?:sql)?\s+\n\s*```", "", response_text)
+                    # Fallback: if exact match fails (whitespace issues), fallback to string replace of content
+                    # THEN remove empty blocks
+                    if fixed_ddl in response_text:
+                        response_text = response_text.replace(fixed_ddl, "")
+                    
+                    # aggressive cleanup of empty/near-empty DDL blocks
+                    response_text = re.sub(r"```(?:sql)?\s*```", "", response_text)
+                    # cleanup blocks that only contain whitespace
+                    response_text = re.sub(r"```(?:sql)?\s+\n\s*```", "", response_text)
 
             # Cleanup "Here is..." text if it's trailing
             response_text = re.sub(r"Here is the updated (?:Spanner )?DDL.*?:?\s*$", "", response_text.strip(), flags=re.IGNORECASE)

@@ -1,7 +1,7 @@
 
 import React, { useRef } from "react";
 import { Editor, DiffEditor, OnMount } from "@monaco-editor/react";
-import { Copy, FileCode2 } from "lucide-react";
+import { Copy, FileCode2, X } from "lucide-react";
 import { useStore } from "../store";
 
 interface SchemaEditorProps {
@@ -200,6 +200,7 @@ export function SchemaEditor({
   const code = type === 'source' ? sourceCode : outputCode;
   const setCode = type === 'source' ? setSourceCode : setOutputCode;
   const isSource = type === 'source';
+  const isSelectionActive = selection?.source === type;
 
   return (
     <div id={`schema-editor-${type}`} className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shadow-xl relative">
@@ -277,13 +278,41 @@ export function SchemaEditor({
           </div>
         )}
 
-        {/* Helper hint for selection */}
-        {showHint && !isLoading && (
-          <div className="absolute bottom-6 right-6 z-10 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-            <div className="bg-zinc-800/90 backdrop-blur border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-              Highlight to ask agent
-            </div>
+        {/* Helper hint or Reset button */}
+        {!isLoading && (showHint || isSelectionActive) && (
+          <div className={`absolute bottom-6 right-6 z-10 transition-all duration-300 ${isSelectionActive
+            ? "opacity-100 translate-y-0"
+            : "opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none"
+            }`}>
+            {isSelectionActive ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelection(null);
+                  // Clear editor selection
+                  if (editorRef.current) {
+                    const pos = editorRef.current.getPosition();
+                    if (pos) {
+                      editorRef.current.setSelection({
+                        startLineNumber: pos.lineNumber,
+                        startColumn: pos.column,
+                        endLineNumber: pos.lineNumber,
+                        endColumn: pos.column
+                      });
+                    }
+                  }
+                }}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-full shadow-lg shadow-indigo-900/20 flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95 font-medium"
+              >
+                <X size={14} />
+                Reset highlight
+              </button>
+            ) : (
+              <div className="bg-zinc-800/90 backdrop-blur border border-zinc-700 text-zinc-200 text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                Highlight to ask agent
+              </div>
+            )}
           </div>
         )}
       </div>
