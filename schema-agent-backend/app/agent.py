@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 from google.adk import Agent
 from google.genai import types
 from toolbox_core import ToolboxClient
-from app.tools import SpannerVerificationTool
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -34,12 +34,12 @@ class SchemaAgentService:
             cls._instance = cls()
         return cls._instance
 
-    async def convert_schema(self, source_ddl: str, dialect: str, verify_ddl: bool = False) -> Dict[str, Any]:
+    async def convert_schema(self, source_ddl: str, dialect: str) -> Dict[str, Any]:
         """
-        Orchestrates conversion with verification loop.
+        Orchestrates conversion.
         """
         logs = []
-        logger.info(f"Starting conversion for dialect: {dialect}, verify_ddl={verify_ddl}")
+        logger.info(f"Starting conversion for dialect: {dialect}")
         
         # Get Key Hints based on Source DDL and Dialect
         ddl_hints = context_manager.get_ddl_hints(source_ddl)
@@ -57,58 +57,23 @@ class SchemaAgentService:
         # Initial Prompt with CoT and Hints
         prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
         
-        verifier = SpannerVerificationTool()
+        logs.append(f"Generating DDL...")
         
-        current_ddl = ""
-        attempt = 0
-        max_attempts = 3 if verify_ddl else 1
+        # Call Agent
+        logger.info(f"Sending prompt to agent")
+        response_text = await self.chat(prompt)
+        # Log the thought process briefly (or full debug)
+        logger.info("Received response from agent")
         
-        while attempt < max_attempts:
-            attempt += 1
-            logs.append(f"Attempt {attempt}: Generating DDL...")
-            
-            # Call Agent
-            logger.info(f"Sending prompt to agent (Attempt {attempt})")
-            response_text = await self.chat(prompt)
-            # Log the thought process briefly (or full debug)
-            logger.info("Received response from agent")
-            
-            extracted_ddl = self._extract_sql(response_text)
-            
-            if not extracted_ddl:
-                logs.append("Error: No SQL block found in agent response.")
-                break
-                
+        extracted_ddl = self._extract_sql(response_text)
+        
+        if not extracted_ddl:
+            logs.append("Error: No SQL block found in agent response.")
+            current_ddl = ""
+        else:
             current_ddl = extracted_ddl
             
-            if not verify_ddl:
-                logs.append("Verification skipped (user disabled).")
-                break
-
-            # Verify
-            verification = await verifier.verify_ddl(current_ddl)
-            if verification["valid"]:
-                logs.append("Verification passed!")
-                break
-            else:
-                errors = "\n".join(verification["errors"])
-                logs.append(f"Verification failed: {errors}")
-                # For retry, we give it the error and ask to fix
-                prompt = f"""
-                The previous DDL had the following errors:
-                {errors}
-                
-                Please fix the DDL based on your previous analysis. 
-                Provide the corrected version in a ```sql block.
-                """
-        
-        # Extract report from the LAST successful response (response_text)
-        # Note: If we retried, 'response_text' holds the latest AP response.
-        # But retry prompts might NOT generate the full report again if we just asked to fix DDL.
-        # Typically, we want the initial detailed report. 
-        # However, for simplicity, we'll try to extract it from the latest response if possible, 
-        # OR we could persist the *first* full response's report if subsequent retries are just fixes.
-        # Let's extract from current 'response_text'.
+        # Extract report from the response
         report = self._extract_report(response_text)
 
         return {

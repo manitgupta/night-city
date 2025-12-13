@@ -20,8 +20,7 @@ A slick, dark-mode "pair programming" interface for converting SQL schemas to Cl
 - **Accept/Reject**: Seamlessly accept or reject proposed changes with one click.
 
 ### 4. Real-time Verification & Migration
-- **Spanner Verification**: Optional "Enable verification?" toggle in the Output editor.
-- **Validation Loop**: When enabled, the DDL is validated against a real Spanner instance to catch complex issues.
+- **On-Demand Verification**: Manually validate the DDL against a real Spanner instance to catch complex issues.
 - **Direct Migration**: Successfully validated schemas can be deployed to a new Spanner database via the "Migrate" button.
 - **Feedback**: Provides a slick loading overlay with status updates during the verification process.
 

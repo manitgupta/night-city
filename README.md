@@ -4,10 +4,10 @@
 
 ## 🚀 Key Features
 
-- **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* and *verifies* your schema.
+- **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* your schema.
 - **Human-in-the-Loop**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
-- **Real-World Verification**: Integrates with a live Spanner instance to validate DDL against actual database constraints.
-- **Analyze & Fix**: If verification fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject.
+- **On-Demand Verification**: Integrates with a live Spanner instance to validate DDL against actual database constraints.
+- **Analyze & Fix Loop**: If validation fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject in a IDE-like, diff-based editor.
 - **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
 - **Interactive Chat**: Ask questions, request refactors (e.g., "Use UUIDs instead of SERIAL"), and get context-aware answers with markdown support.
 
@@ -34,9 +34,9 @@ The agent is prompted to follow a rigid "Principal Engineer" workflow:
 2.  **Plan**: Propose Spanner-specific optimizations (Interleaving, Sharding keys).
 3.  **Generate**: Output clean, valid DDL.
 
-#### 3. Human-in-the-Loop Validation
-- **Verification Loop**: If enabled, the agent attempts to create the schema on a real Spanner instance.
-- **Self-Correction**: If verification fails, the error is fed back to the agent ("Analyze & Fix"), which decompiles the error and attempts a targeted fix.
+#### 3. Human-in-the-loop Validation
+- **Validation**: Users can instantly validate the generated DDL against a real Spanner instance.
+- **Self-Correction**: If validation fails, the error is fed back to the agent ("Analyze & Fix"), which decompiles the error and attempts a targeted fix.
 
 ## 🛠️ Setup & Installation
 
@@ -113,9 +113,8 @@ Once deployed, click the generated URL to start using Night City.
 
 1.  **Paste Schema**: Paste your MySQL/PostgreSQL schema into the left panel.
 2.  **Select Dialect**: Choose the source dialect.
-3.  **Enable Verification (Optional)**: Check "Enable verification?" for deep validation (requires active Spanner credentials).
-4.  **Convert**: Click the "Convert" button.
-    - *Tip*: The agent will iterate on the schema if verification fails, fixing errors automatically.
+3.  **Convert**: Click the "Convert" button.
+    - *Tip*: You can manually validate the schema after conversion.
 5.  **Refine**:
     - Highlight code to ask the agent specific questions.
     - Chat with the agent to request changes (e.g., "Add a `shard_id` column").
