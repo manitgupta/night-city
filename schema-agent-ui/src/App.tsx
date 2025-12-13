@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, Eye, ThumbsUp, ThumbsDown, Rocket } from "lucide-react";
 import { useStore } from "./store";
 import { api, AnalyzeResponse } from "./services/api";
+import { IntroductionWizard } from "./components/IntroductionWizard";
 
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
@@ -185,6 +186,7 @@ function App() {
 
   return (
     <div className="h-screen w-full bg-zinc-950 text-zinc-200 flex flex-col font-sans selection:bg-indigo-500/30 relative">
+      <IntroductionWizard />
       <MigrateDialog
         isOpen={showMigrateDialog}
         onClose={() => {
@@ -335,7 +337,7 @@ function App() {
       )}
 
       {/* Header */}
-      <header className="h-14 border-b border-zinc-800 bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-10">
+      <header id="app-header" className="h-14 border-b border-zinc-800 bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-lg shadow-indigo-500/20">
             <Database size={18} className="text-white" />
@@ -369,6 +371,7 @@ function App() {
                   <div className="relative z-50">
                     <button
                       onClick={() => setShowDialectDropdown(!showDialectDropdown)}
+                      id="dialect-dropdown"
                       className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${sourceDialect
                           ? "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 hover:border-zinc-600"
                           : "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.1)]"
@@ -421,6 +424,7 @@ function App() {
 
                   {sourceCode.trim() && (
                     <button
+                      id="convert-button"
                       onClick={handleConvert}
                       disabled={!sourceDialect || isConverting}
                       className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceDialect
@@ -504,6 +508,7 @@ function App() {
 
                   {/* Validate Button */}
                   <button
+                        id="validate-button"
                     onClick={handleValidate}
                     disabled={isValidating || !outputCode.trim() || isConverting}
                     className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md border border-zinc-700 hover:border-zinc-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -520,6 +525,7 @@ function App() {
                         <>
                           <div className="w-px h-4 bg-zinc-800 mx-2" />
                           <button
+                            id="migrate-button"
                             onClick={() => setShowMigrateDialog(true)}
                             className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md shadow-lg shadow-indigo-500/20 transition-all animate-in fade-in slide-in-from-right-4"
                           >
@@ -539,7 +545,7 @@ function App() {
           </PanelResizeHandle>
 
           {/* Right Panel: Chat */}
-          <Panel defaultSize={30} minSize={20}>
+          <Panel defaultSize={30} minSize={20} id="chat-interface">
             <ChatInterface />
           </Panel>
 

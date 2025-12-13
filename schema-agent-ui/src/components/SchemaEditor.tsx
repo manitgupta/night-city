@@ -202,7 +202,7 @@ export function SchemaEditor({
   const isSource = type === 'source';
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shadow-xl relative">
+    <div id={`schema-editor-${type}`} className="flex flex-col h-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shadow-xl relative">
       <div className="flex items-center justify-between px-4 py-3 bg-zinc-950 border-b border-zinc-800">
         <div className="flex items-center gap-2 text-zinc-100">
           <FileCode2 size={16} className={isSource ? "text-indigo-400" : "text-emerald-400"} />
