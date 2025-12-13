@@ -109,6 +109,10 @@ gcloud run deploy night-city \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
+  --min-instances 1 \
+  --timeout 1200 \
+  --cpu 2 \
+  --memory 1Gi \
   --set-env-vars="GEMINI_API_KEY=your-key,SPANNER_PROJECT_ID=your-project,SPANNER_INSTANCE_ID=your-instance,GEMINI_MODEL=gemini-3-pro-preview"
 ```
 Once deployed, click the generated URL to start using Night City.
