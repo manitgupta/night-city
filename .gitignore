@@ -1,4 +1,5 @@
 schema-agent-ui/node_modules
+schema-agent-ui/dist
 schema-agent-backend/venv
 schema-agent-backend/__pycache__/
 schema-agent-backend/app/__pycache__/
