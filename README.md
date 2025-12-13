@@ -45,6 +45,7 @@ The agent is prompted to follow a rigid "Principal Engineer" workflow:
 - Python 3.10+
 - Node.js 16+
 - Google Cloud Project with Spanner API enabled (for verification)
+- [Gemini API Key](https://ai.google.dev/gemini-api/docs/api-key)
 - Docker (optional, for containerized run)
 
 ### 1. Environment Configuration
