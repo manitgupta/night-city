@@ -30,6 +30,7 @@ function App() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationResult, setMigrationResult] = useState<{ success: boolean; database_uri: string; message: string; } | null>(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
+  const [showValidateHighlight, setShowValidateHighlight] = useState(false);
   const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode } = useStore();
 
   // Invalidate validation result when output code changes
@@ -484,7 +485,8 @@ function App() {
                         id="validate-button"
                     onClick={handleValidate}
                     disabled={isValidating || !outputCode.trim() || isConverting}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md border border-zinc-700 hover:border-zinc-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md border border-zinc-700 hover:border-zinc-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${showValidateHighlight ? "ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-900 animate-pulse" : ""
+                          }`}
                   >
                     {isValidating ? (
                       <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
@@ -494,19 +496,38 @@ function App() {
                     Validate
                   </button>
 
-                      {validationResult?.valid && !isConverting && (
-                        <>
-                          <div className="w-px h-4 bg-zinc-800 mx-2" />
-                          <button
-                            id="migrate-button"
-                            onClick={() => setShowMigrateDialog(true)}
-                            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-md shadow-lg shadow-indigo-500/20 transition-all animate-in fade-in slide-in-from-right-4"
-                          >
-                            <Rocket size={12} />
-                            Migrate
-                          </button>
-                        </>
-                      )}
+                      <div className="w-px h-4 bg-zinc-800 mx-2" />
+
+                      {/* Migrate Button Wrapper for Tooltip */}
+                      <div className="relative group">
+                        <button
+                          id="migrate-button"
+                          onClick={() => {
+                            if (validationResult?.valid) {
+                              setShowMigrateDialog(true);
+                            } else {
+                              // Trigger highlight on Validate button
+                              setShowValidateHighlight(true);
+                              setTimeout(() => setShowValidateHighlight(false), 2000);
+                            }
+                          }}
+                          disabled={isConverting} // Only hard disable if converting, otherwise "soft disable" to allow click for nudge
+                          className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md shadow-lg transition-all animate-in fade-in slide-in-from-right-4 ${validationResult?.valid
+                            ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-500/20 cursor-pointer"
+                            : "bg-zinc-800 text-zinc-500 border border-zinc-700 cursor-not-allowed opacity-70"
+                            }`}
+                        >
+                          <Rocket size={12} />
+                          Migrate
+                        </button>
+
+                        {/* Tooltip for disabled state */}
+                        {!validationResult?.valid && (
+                          <div className="absolute right-0 top-full mt-2 w-48 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                            Please validate the converted schema first.
+                          </div>
+                        )}
+                      </div>
                 </div>
                   )
               }

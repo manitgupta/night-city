@@ -69,11 +69,11 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
     },
     {
       target: '#validate-button',
-      content: 'Use this to verify your schema to catch any syntax issues. Since the agent can make mistakes, the validation supports an AI-assisted fix-up process. If issues are identified during validation, the agent will help diagnose conversion issues and iteratively fix them. Once the validation is successful, the Migrate button will become visible to create the schema on Spanner.',
+      content: 'Use this to verify your schema. You must successfully validate the schema before you can migrate it to Spanner. If issues are found, the agent will help you fix them.',
     },
     {
       target: '#migrate-button',
-      content: 'Ready to launch? This button lets you create a real Spanner database and apply your schema directly from the UI!',
+      content: 'Once validation passes, this button becomes enabled. Click it to create a real Spanner database and apply your schema directly!',
     },
     {
       target: '#chat-interface',
