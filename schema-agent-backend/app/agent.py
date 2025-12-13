@@ -110,7 +110,7 @@ class SchemaAgentService:
             return {
                 "converted_ddl": "",
                 "logs": logs,
-                "report": f"Conversion failed. The model returned no content. Reason: {finish_reason}"
+                "report": f"Conversion failed. The model returned no content. \n Reason: {finish_reason}. \n This is generally due to model timeout or internal error. Please retry again. If the error persists, please file an issue at [this link](https://github.com/manitgupta/night-city/issues/new/choose)."
             }
 
         response_text = response.text
