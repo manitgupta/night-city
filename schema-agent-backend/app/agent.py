@@ -20,7 +20,8 @@ class SchemaAgentService:
     _instance = None
 
     def __init__(self):
-        self.model_name = "gemini-3-pro-preview"
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+        logger.info(f"SchemaAgentService initialized with model: {self.model_name}")
         # ADK Agent
         self.agent = Agent(
             name="SchemaAgent",
@@ -90,6 +91,28 @@ class SchemaAgentService:
                 "report": f"Conversion failed due to API error: {str(e)}"
             }
         
+        # Defensive check for empty response (blocked/safety/timeout)
+        if not response.text:
+            finish_reason = "Unknown"
+            if response.candidates and response.candidates[0].finish_reason:
+                finish_reason = str(response.candidates[0].finish_reason)
+            
+            error_msg = f"Gemini response contained no text. Finish Reason: {finish_reason}"
+            logger.error(error_msg)
+            logs.append(f"CRITICAL ERROR: {error_msg}")
+            
+            # Additional debug info
+            try:
+                logger.error(f"Full Response Debug: {response}")
+            except:
+                pass
+                
+            return {
+                "converted_ddl": "",
+                "logs": logs,
+                "report": f"Conversion failed. The model returned no content. Reason: {finish_reason}"
+            }
+
         response_text = response.text
         # Log the thought process briefly (or full debug)
         logger.info("Received response from agent")
@@ -183,6 +206,20 @@ class SchemaAgentService:
         # Check for tool calls
         suggested_fix = None
         response_text = ""
+        
+        # Defensive: Check if we have candidates/parts
+        # google-genai response logic handles text property but if blocked it might be empty
+        pass_check = True
+        if not response.text and not response.function_calls:
+            # It might be blocked
+            finish_reason = "Unknown"
+            if response.candidates and response.candidates[0].finish_reason:
+                finish_reason = str(response.candidates[0].finish_reason)
+            logger.error(f"Chat response blocked/empty. Finish Reason: {finish_reason}")
+            return {
+                "response": f"I was unable to generate a response. The model may have been blocked or timed out. (Reason: {finish_reason})",
+                "suggested_fix": None
+            }
 
         # Handle potentially multiple parts, but usually it's text then function call or just function call
         if response.function_calls:
@@ -291,6 +328,18 @@ class SchemaAgentService:
                 )
             )
             response = chat.send_message(prompt)
+            
+            # Defensive check
+            if not response.text:
+                finish_reason = "Unknown"
+                if response.candidates and response.candidates[0].finish_reason:
+                    finish_reason = str(response.candidates[0].finish_reason)
+                logger.error(f"AnalyzeFix response blocked/empty. Reason: {finish_reason}")
+                return {
+                    "explanation": f"Model failed to analyze error. (Reason: {finish_reason})",
+                    "fixed_ddl": generated_ddl
+                }
+                
             text = response.text
         except Exception as e:
             logger.error(f"Gemini API call failed in analyze_fix: {str(e)}", exc_info=True)
