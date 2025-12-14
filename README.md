@@ -12,6 +12,15 @@
 - **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
 - **Agent Chat & Schema Refinement**: Ask questions or request schema changes (e.g., "Rename `id` to `user_id`"). The agent proposes changes via a "Review" button, letting you visualize diffs before accepting.
 
+## ✅ Supported Dialects
+
+Night City currently supports schema conversion from the following sources:
+- **PostgreSQL**
+- **MySQL**
+- **Oracle**
+- **SQL Server**
+- **Cassandra**
+
 ## 🏗️ Architecture
 
 The project consists of two main components:
