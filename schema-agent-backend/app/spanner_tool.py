@@ -12,27 +12,52 @@ from fastapi import BackgroundTasks
 
 logger = logging.getLogger(__name__)
 
+class SpannerSingleton:
+    _instance = None
+    _client = None
+    _spanner_instance_obj = None
+
+    @classmethod
+    def get_client(cls):
+        if cls._client is None:
+            project_id = os.getenv("SPANNER_PROJECT_ID")
+            if project_id:
+                try:
+                    cls._client = spanner.Client(project=project_id)
+                    logger.info("Initialized global Spanner Client.")
+                except Exception as e:
+                    logger.error(f"Failed to initialize global Spanner Client: {e}")
+            else:
+                logger.warning("SPANNER_PROJECT_ID not set. Global client not initialized.")
+        return cls._client
+
+    @classmethod
+    def get_instance_obj(cls):
+        """
+        Returns the spanner.Instance object using the global client and SPANNER_INSTANCE_ID.
+        """
+        if cls._spanner_instance_obj is None:
+            client = cls.get_client()
+            instance_id = os.getenv("SPANNER_INSTANCE_ID")
+            if client and instance_id:
+                cls._spanner_instance_obj = client.instance(instance_id)
+                logger.info(f"Initialized global Spanner Instance object: {instance_id}")
+            else:
+                logger.warning("Client or SPANNER_INSTANCE_ID missing. Instance object not initialized.")
+        return cls._spanner_instance_obj
+
 class SpannerVerificationTool:
     def __init__(self):
         """
         Initializes the SpannerVerificationTool.
-        Expects SPANNER_PROJECT_ID and SPANNER_INSTANCE_ID to be set in environment variables.
+        Uses the Singleton Spanner Client/Instance for efficiency.
         """
-        self.project_id = os.getenv("SPANNER_PROJECT_ID")
-        self.instance_id = os.getenv("SPANNER_INSTANCE_ID")
+        self.instance = SpannerSingleton.get_instance_obj()
+        self.client = SpannerSingleton.get_client()
         
-        if not self.project_id or not self.instance_id:
-            logger.warning("SPANNER_PROJECT_ID or SPANNER_INSTANCE_ID not set. Verification will fail if attempted.")
-            self.client = None
-            self.instance = None
-        else:
-            try:
-                self.client = spanner.Client(project=self.project_id)
-                self.instance = self.client.instance(self.instance_id)
-            except Exception as e:
-                logger.error(f"Failed to initialize Spanner client: {e}")
-                self.client = None
-                self.instance = None
+        # Fallback logging if singleton failed
+        if not self.instance:
+            logger.warning("SpannerVerificationTool initialized without a valid Spanner Instance connection.")
 
     async def verify_ddl(self, ddl: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
         """
@@ -40,7 +65,7 @@ class SpannerVerificationTool:
         Returns a dictionary with 'valid': bool, 'errors': list[str].
         """
         if not self.instance:
-             return {
+            return {
                 "valid": False, 
                 "errors": ["Spanner Client not initialized. Check server logs and environment variables."]
             }
@@ -62,7 +87,7 @@ class SpannerVerificationTool:
             ddl_statements = [stmt.strip() for stmt in ddl.split(";") if stmt.strip()]
             
             if not ddl_statements:
-                 return {"valid": False, "errors": ["No DDL statements found."]}
+                return {"valid": False, "errors": ["No DDL statements found."]}
 
             # We'll run the creation logic in a separate thread to avoid blocking the event loop
             await loop.run_in_executor(None, self._create_db_sync, database_id, ddl_statements)
@@ -82,17 +107,12 @@ class SpannerVerificationTool:
             # Clean generic exception message
             logger.error(f"Unexpected error during verification: {e}")
             return {"valid": False, "errors": [f"Unexpected Error: {str(e)}"]}
-        # Note: No 'finally' block needed for cleanup because generic background task handles it?
-        # WAIT: If creation fails, we still want to drop it if it was partially created.
-        # Actually, adding the task to background_tasks ensures it runs AFTER the response is sent.
-        # So even if we return early with an error, FastAPI will run the background task.
-        # BUT, if we return early (e.g. "No DDL statements found"), we might not even have created it.
-        # _drop_db_background handles NotFound, so it's safe to always run it.
 
     def _create_db_sync(self, database_id: str, ddl_statements: List[str]):
         """
         Synchronous helper to create the database.
         """
+        # Create a database object bound to the singleton instance
         database = self.instance.database(database_id, ddl_statements=ddl_statements)
         
         try:
@@ -126,6 +146,7 @@ class SpannerMigrationTool:
         """
         Initializes the SpannerMigrationTool.
         The client is initialized per request to allow different projects/instances.
+        Future optimization: Could use a LRU cache of clients if needed.
         """
         pass
 
@@ -142,7 +163,7 @@ class SpannerMigrationTool:
             ddl_statements = [stmt.strip() for stmt in ddl.split(";") if stmt.strip()]
             
             if not ddl_statements:
-                 return {"success": False, "message": "No DDL statements found."}
+                return {"success": False, "message": "No DDL statements found."}
 
             # Run creation in thread pool
             await loop.run_in_executor(
@@ -164,7 +185,7 @@ class SpannerMigrationTool:
         except exceptions.AlreadyExists:
             return {"success": False, "message": f"Database '{database_id}' already exists."}
         except exceptions.PermissionDenied:
-             return {"success": False, "message": "Permission denied. Please check if the service account has permission to create databases."}
+            return {"success": False, "message": "Permission denied. Please check if the service account has permission to create databases."}
         except exceptions.InvalidArgument as e:
             return {"success": False, "message": f"Invalid argument (possibly DDL syntax): {str(e)}"}
         except exceptions.GoogleAPICallError as e:

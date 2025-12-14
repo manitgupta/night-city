@@ -125,7 +125,7 @@ class ConfigResponse(BaseModel):
 @app.post("/validate")
 async def validate_ddl(request: ValidateRequest, background_tasks: BackgroundTasks):
     try:
-        from app.tools import SpannerVerificationTool
+        from app.spanner_tool import SpannerVerificationTool
         verifier = SpannerVerificationTool()
         result = await verifier.verify_ddl(request.ddl, background_tasks)
         return result
@@ -147,7 +147,7 @@ async def analyze_error(request: AnalyzeRequest):
 @app.post("/migrate", response_model=MigrateResponse)
 async def migrate_database(request: MigrateRequest):
     try:
-        from app.tools import SpannerMigrationTool
+        from app.spanner_tool import SpannerMigrationTool
         tool = SpannerMigrationTool()
         result = await tool.migrate_database(
             request.project_id,
