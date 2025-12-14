@@ -6,6 +6,7 @@ export interface Message {
   content: string;
   isApplying?: boolean; // If agent is suggesting a fix
   isReport?: boolean; // If this message is a conversion report
+  isHelpful?: boolean; // If this message is a helpful tip (pulsates)
   suggestedFix?: {
     description: string;
     newCode: string;

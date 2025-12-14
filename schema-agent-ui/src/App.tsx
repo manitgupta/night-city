@@ -265,6 +265,21 @@ function App() {
         )
       }));
 
+      // Add helpful follow-up message
+      setTimeout(() => {
+        addMessage({
+          id: Date.now().toString(),
+          role: 'agent',
+          content: "While I've done my best to convert your schema, I might have missed a nuance or two. \n\nI recommend clicking **Validate** to run a syntax check. If any issues are found, I can use the compiler errors to help you iteratively refine and fix the schema! 🛠️",
+          isReport: false,
+          isHelpful: true
+        });
+        // Also trigger the Validate button highlight
+        setShowValidateHighlight(true);
+        // Highlight lasts for 6 seconds to ensure user sees it
+        setTimeout(() => setShowValidateHighlight(false), 6000);
+      }, 500); // Small delay for effect
+
     } catch (error) {
       console.error("Conversion error:", error);
       useStore.setState((state: any) => ({

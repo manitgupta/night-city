@@ -107,15 +107,21 @@ export function ChatInterface() {
                     ? 'bg-zinc-800 text-zinc-100'
                     : 'bg-indigo-600 text-white'
                     }`}
-                  style={msg.isReport ? {
-                    animation: 'flash-highlight 4s ease-out forwards'
-                  } : {}}
+                  style={{
+                    ...(msg.isReport ? { animation: 'flash-highlight 4s ease-out forwards' } : {}),
+                    ...(msg.isHelpful ? { animation: 'pulse-glow 3s infinite' } : {})
+                  }}
                 >
                   <style>{`
                     @keyframes flash-highlight {
                       0% { background-color: rgba(99, 102, 241, 0.5); box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
                       20% { background-color: rgba(99, 102, 241, 0.3); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
                       100% { background-color: #27272a; box-shadow: none; } 
+                    }
+                    @keyframes pulse-glow {
+                      0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); border: 1px solid rgba(99, 102, 241, 0.1); }
+                      50% { box-shadow: 0 0 15px 0 rgba(99, 102, 241, 0.3); border: 1px solid rgba(99, 102, 241, 0.5); }
+                      100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); border: 1px solid rgba(99, 102, 241, 0.1); }
                     }
                   `}</style>
                   <ReactMarkdown
