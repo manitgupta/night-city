@@ -1,6 +1,6 @@
 # <img src="schema-agent-ui/assets/logo.png" width="48" height="48" style="vertical-align: middle;" /> Night City: Agentic Spanner Schema Converter
 
-**Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a slick, developer-focused UI to make schema migration interactive and seamless.
+**Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make schema migration interactive and seamless.
 
 ![Demo](schema-agent-ui/assets/night-city-demo.gif)
 
@@ -30,7 +30,7 @@ Before the agent sees your schema, a **Context Manager** analyzes the Source DDL
 - **Mapping Rules**: Enforces deterministic data type conversions (e.g., PostgreSQL `JSONB` → Spanner `JSON`) based on the selected dialect.
 
 #### 2. Chain of Thought (CoT) Reasoning
-The agent is prompted to follow a rigid "Principal Engineer" workflow:
+The agent is prompted to follow a rigid chain-of-thought workflow to break down the source schema before conversion:
 1.  **Analyze**: Parse the source schema and identify constraints.
 2.  **Plan**: Propose Spanner-specific optimizations (Interleaving, Sharding keys).
 3.  **Generate**: Output clean, valid DDL.
