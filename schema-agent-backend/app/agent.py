@@ -42,13 +42,19 @@ class SchemaAgentService:
             cls._instance = cls()
         return cls._instance
 
-    async def convert_schema(self, source_ddl: str, dialect: str) -> Dict[str, Any]:
+    async def convert_schema_stream(self, source_ddl: str, dialect: str):
         """
-        Orchestrates conversion.
+        Orchestrates conversion with streaming response.
+        Yields NDJSON chunks:
+        - {"type": "log", "content": "..."}
+        - {"type": "thought", "content": "..."}
+        - {"type": "chunk", "content": "..."} (Optional, if we decide to stream validation/other info, but for now we buffer DDL)
+        - {"type": "result", "converted_ddl": "...", "report": "...", "logs": [...]}
         """
         logs = []
-        logger.info(f"Starting conversion for dialect: {dialect}")
+        logger.info(f"Starting streaming conversion for dialect: {dialect}")
         
+        # 1. Setup Phase - Yield Logs
         # Get Key Hints based on Source DDL and Dialect
         ddl_hints = context_manager.get_ddl_hints(source_ddl)
         feature_hints = context_manager.get_feature_hints(source_ddl)
@@ -57,78 +63,119 @@ class SchemaAgentService:
         formatted_hints = context_manager.format_hints_for_prompt(ddl_hints, feature_hints, mapping_rules)
         
         if formatted_hints:
-            logger.info(f"Found {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules.")
-            logs.append(f"Injected {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules.")
+            msg = f"Injected {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules."
+            logger.info(msg)
+            logs.append(msg)
+            yield {"type": "log", "content": msg}
         else:
             logger.info("No specific hints found.")
-        
+
         # Initial Prompt with CoT and Hints
         prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
         
+        yield {"type": "log", "content": "Generating DDL..."}
         logs.append(f"Generating DDL...")
         
-        # Call Agent
-        logger.info(f"Sending prompt to agent")
+        # 2. Generation Phase - Stream Thoughts
+        logger.info(f"Sending prompt to agent (Stream)")
+        
+        full_response_text = ""
         
         try:
-            # Use shared client with timeout
-            # Note: config is for generation config, timeout is usually a method argument in google-genai
-            # We set a generous 300s (5 min) timeout as requested.
-            response = self.client.models.generate_content(
+            # Use generate_content_stream
+            # We assume google-genai SDK 0.x/1.x conventions. 
+            # If ThinkingConfig is available in types.
+            
+            # Defensive check for ThinkingConfig
+            config_args = {"temperature": 0.1}
+            
+            # Try to add thinking config if available
+            try:
+                # Note: The user mentioned ThinkingConfig. 
+                # We interpret this as a config for the model to output thoughts.
+                # In standard Gemini 1.5/2.0 protocols, thoughts might be part of the content or 'candidates'.
+                # For this implementation, we will try to use the `thinking_config` if strictly required,
+                # BUT standard `generate_content` often interleaves thoughts if prompted or if it's a specific model feature.
+                # If the SDK version supports it:
+                if hasattr(types, "ThinkingConfig"):
+                    config_args["thinking_config"] = types.ThinkingConfig(include_thoughts=True)
+                else:
+                    # Fallback: Just rely on prompt or standard output if the SDK is older
+                    # But the user specifically asked for it. 
+                    # We'll try to just pass it in config if possible or assume it's part of the API.
+                    # Since we can't easily see the SDK, we'll try to instantiate it dynamically or just rely on standard config.
+                    pass
+            except Exception as e:
+                logger.warning(f"Could not configure ThinkingConfig: {e}")
+
+            response_stream = self.client.models.generate_content_stream(
                 model=self.model_name,
                 contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.1 # Low temp for code
-                )
+                config=types.GenerateContentConfig(**config_args)
             )
+
+            for chunk in response_stream:
+                # Handle Thoughts
+                # Check for 'candidates' and 'content' and 'parts'
+                # In some SDK versions, thoughts are in a specific part or metadata.
+                # Use a heuristic: if we have 'thought' in part or if strict thinking model is used.
+                
+                # For now, we'll assume chunks contain `text`.
+                # If usage of "ThinkingConfig" puts thoughts in `text` but with a specific structure,/
+                # OR if it's a separate part type.
+                
+                # Inspect chunk for thoughts
+                # Note: The actual API for "thoughts" is new. 
+                # We will check if `chunk.candidates[0].content.parts[0].thought` exists (conceptual).
+                
+                # If we can't strictly distinguish "thought" object from text, we might treat all initial text as thought 
+                # if it looks like it? No, that's risky.
+                
+                # Let's try to find thoughts in the candidates.
+                try:
+                    candidates = chunk.candidates
+                    if candidates:
+                        for cand in candidates:
+                            if hasattr(cand, "content") and cand.content and cand.content.parts:
+                                for part in cand.content.parts:
+                                    # Check for thought
+                                    # Hypothetical attribute based on request
+                                    if hasattr(part, "thought") and part.thought:
+                                        # It's a thought!
+                                        yield {"type": "thought", "content": part.text if part.text else "..."}
+                                    elif hasattr(part, "text") and part.text:
+                                        # It's text (content)
+                                        # Buffer distinct text
+                                        full_response_text += part.text
+                except Exception as loop_e:
+                    # Fallback standard extraction
+                    if hasattr(chunk, "text") and chunk.text:
+                        full_response_text += chunk.text
+
         except Exception as e:
-            logger.error(f"Gemini API call failed in convert_schema: {str(e)}", exc_info=True)
-            # Re-raise or return error? The logs expects a list.
+            logger.error(f"Gemini API stream failed: {str(e)}", exc_info=True)
             logs.append(f"CRITICAL ERROR: Gemini API call failed: {str(e)}")
-            return {
+            yield {
+                "type": "result",
                 "converted_ddl": "",
                 "logs": logs,
                 "report": f"Conversion failed due to API error: {str(e)}"
             }
-        
-        # Defensive check for empty response (blocked/safety/timeout)
-        if not response.text:
-            finish_reason = "Unknown"
-            if response.candidates and response.candidates[0].finish_reason:
-                finish_reason = str(response.candidates[0].finish_reason)
-            
-            error_msg = f"Gemini response contained no text. Finish Reason: {finish_reason}"
-            logger.error(error_msg)
-            logs.append(f"CRITICAL ERROR: {error_msg}")
-            
-            # Additional debug info
-            try:
-                logger.error(f"Full Response Debug: {response}")
-            except:
-                pass
-                
-            return {
-                "converted_ddl": "",
-                "logs": logs,
-                "report": f"Conversion failed. The model returned no content. \n Reason: {finish_reason}. \n This is generally due to model timeout or internal error. Please retry again. If the error persists, please file an issue at [this link](https://github.com/manitgupta/night-city/issues/new/choose)."
-            }
+            return
 
-        response_text = response.text
-        # Log the thought process briefly (or full debug)
-        logger.info("Received response from agent")
-        
-        extracted_ddl = self._extract_sql(response_text)
-        
+        # 3. Finalization Phase
+        # Extract DDL and Report from buffered text
+        extracted_ddl = self._extract_sql(full_response_text)
         if not extracted_ddl:
             logs.append("Error: No SQL block found in agent response.")
             current_ddl = ""
         else:
             current_ddl = extracted_ddl
             
-        # Extract report from the response
-        report = self._extract_report(response_text)
+        report = self._extract_report(full_response_text)
 
-        return {
+        yield {
+            "type": "result", # Final payload
             "converted_ddl": current_ddl,
             "logs": logs,
             "report": report

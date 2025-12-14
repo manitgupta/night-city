@@ -50,7 +50,114 @@ export const api = {
             throw new Error(errorData.detail || `Conversion failed: ${response.statusText}`);
         }
 
+        // Handle NDJSON stream if response header indicates it, or just parse chunks
+        // Check content-type
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/x-ndjson")) {
+            // It's a stream! But this method signature expects a Promise<ConversionResponse>.
+            // We'll consume the stream entirely here for backward compatibility or 
+            // ideally we'd use a different method. 
+            // BUT, since we are adding a NEW method `convertSchemaStream` below, we can leave this one 
+            // to fail or just read the last result processing.
+            // Let's implement `convertSchemaStream` properly below and leave this one as legacy (async/await non-streaming).
+            // However, since we CHANGED the backend to ALWAYS stream, this method needs to adapt 
+            // to consume the stream and return the final Result.
+
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let finalResult: ConversionResponse | null = null;
+
+            if (reader) {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'result') {
+                                finalResult = data;
+                            }
+                        } catch (e) {
+                            console.warn("Failed to parse chunk", e);
+                        }
+                    }
+                }
+            }
+
+            if (finalResult) return finalResult;
+            throw new Error("Stream did not return a final result");
+        }
+
         return response.json();
+    },
+
+    async convertSchemaStream(
+        sourceDdl: string,
+        sourceDialect: string,
+        onChunk: (chunk: any) => void
+    ): Promise<ConversionResponse> {
+        const response = await fetch(`${API_BASE_URL}/convert`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                source_ddl: sourceDdl,
+                source_dialect: sourceDialect,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Conversion failed: ${response.statusText}`);
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let finalResult: ConversionResponse | null = null;
+        let buffer = "";
+
+        if (reader) {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                // Keep the last partial line in the buffer
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        // Call callback
+                        onChunk(data);
+
+                        if (data.type === 'result') {
+                            finalResult = data;
+                        }
+                    } catch (e) {
+                        console.warn("Failed to parse chunk", e);
+                    }
+                }
+            }
+        }
+
+        // Process any remaining buffer provided it's valid JSON
+        if (buffer.trim()) {
+            try {
+                const data = JSON.parse(buffer);
+                onChunk(data);
+                if (data.type === 'result') finalResult = data;
+            } catch (e) { }
+        }
+
+        if (finalResult) return finalResult;
+        throw new Error("Stream ended without result");
     },
 
     async chat(message: string, source_ddl: string, output_ddl: string, selection: any): Promise<ChatResponse> {

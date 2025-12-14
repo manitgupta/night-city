@@ -76,14 +76,20 @@ if static_dir.exists():
 async def health_check():
     return {"status": "ok"}
 
-@app.post("/convert", response_model=ConversionResponse)
+@app.post("/convert")
 async def convert_schema(request: ConversionRequest):
     try:
-        result = await agent_service.convert_schema(
-            request.source_ddl, 
-            request.source_dialect
-        )
-        return ConversionResponse(**result)
+        from fastapi.responses import StreamingResponse
+        import json
+
+        async def generate():
+            async for chunk in agent_service.convert_schema_stream(
+                request.source_ddl, 
+                request.source_dialect
+            ):
+                yield json.dumps(chunk) + "\n"
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

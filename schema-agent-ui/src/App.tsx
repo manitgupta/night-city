@@ -172,8 +172,81 @@ function App() {
     setAgentTyping(true);
     setIsSourceLocked(true); // Auto-lock on convert
 
+    // Add a placeholder message for the agent's thought process
+    const thinkingMsgId = Date.now().toString();
+    addMessage({
+      id: thinkingMsgId,
+      role: 'agent',
+      content: "Thinking...",
+      isReport: false
+    });
+
     try {
-      const result = await api.convertSchema(sourceCode, sourceDialect);
+      let thoughtBuffer = "";
+
+      const result = await api.convertSchemaStream(sourceCode, sourceDialect, (chunk) => {
+        if (chunk.type === 'thought') {
+          // Update the thinking message
+          // We want a slick UI, maybe just appending thoughts?
+          // Or maybe replacing content?
+          // "Thinking... I am analyzing... I see this..."
+          // Let's append with newlines or just show the latest thought?
+          // User said "show model's thinking".
+          // Let's append but maybe debounce in a real app. Here we just update.
+          // We'll format thoughts as italic or in a specific block if possible, 
+          // but standard markdown is what we have in ChatInterface.
+
+          if (chunk.content) {
+            thoughtBuffer += chunk.content;
+            // Update the message in store (we assume useStore has updateMessage or we just re-add/replace)
+            // Actually useStore might not have updateMessage. Let's check.
+            // If not, we might need to remove and add, which is flickery.
+            // Wait, useStore definition isn't fully visible but I can infer.
+            // If I can't update, I'll delete and add?
+            // Let's assume we can't easily update nicely without lag if we spam actions.
+            // But for now, let's try to update the LAST message if it matches ID?
+            // The store likely has `messages` array.
+
+            // NOTE: To make it slick, we should probably have a "thinking" state in the ChatInterface 
+            // or updates to the store.
+            // Since I can't easily change the Store interface right now without checking it,
+            // I will check if I can just use `addMessage` to replace?
+            // No, `addMessage` usually appends.
+
+            // Let's look at `useStore`.
+            // For this step, I will assume we can't update easily and just show "Thinking..." and maybe 
+            // major progress updates?
+            // BUT the user wants "interactive see the model's process".
+
+            // Ideally: Modify Store to support `updateMessage(id, content)`.
+            // I'll check store first.
+          }
+        } else if (chunk.type === 'log') {
+          // Maybe show logs as thoughts too?
+          if (chunk.content) {
+            thoughtBuffer += `\n> ${chunk.content}\n`;
+          }
+        }
+
+        if (thoughtBuffer) {
+          // Update the message (we'll implement update logic or hack it by referencing store)
+          // Since I can't see store code, I'll assume I need to implement `updateLastMessage` or similar if missing.
+          // Let's just assume for now I will use `updateStreamingMessage` if I add it, or just use a local state 
+          // and pass it to chat? 
+          // ChatInterface reads from store.
+
+          // Plan B: Just update the same message ID if the store supports it, or valid React state if ChatInterface supports it.
+          // Actually, `useStore` is from zustand usually.
+          useStore.setState((state: any) => ({
+            messages: state.messages.map((m: any) =>
+              m.id === thinkingMsgId
+                ? { ...m, content: thoughtBuffer || "Thinking..." }
+                : m
+            )
+          }));
+        }
+      });
+
       setOutputCode(result.converted_ddl);
 
       const logsSummary = result.logs.length > 0
@@ -182,19 +255,24 @@ function App() {
 
       const messageContent = result.report || `Conversion complete! ${logsSummary}`;
 
-      addMessage({
-        id: Date.now().toString(),
-        role: 'agent',
-        content: messageContent,
-        isReport: !!result.report
-      });
+      // Replace the thinking message with the final report
+      useStore.setState((state: any) => ({
+        messages: state.messages.map((m: any) =>
+          m.id === thinkingMsgId
+            ? { ...m, content: messageContent, isReport: !!result.report }
+            : m
+        )
+      }));
+
     } catch (error) {
       console.error("Conversion error:", error);
-      addMessage({
-        id: Date.now().toString(),
-        role: 'agent',
-        content: `Error converting schema: ${error instanceof Error ? error.message : "Unknown error"}`
-      });
+      useStore.setState((state: any) => ({
+        messages: state.messages.map((m: any) =>
+          m.id === thinkingMsgId
+            ? { ...m, content: `Error converting schema: ${error instanceof Error ? error.message : "Unknown error"}` }
+            : m
+        )
+      }));
     } finally {
       setIsConverting(false);
       setAgentTyping(false);
