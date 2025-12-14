@@ -152,5 +152,23 @@ MAPPING_RULES_KNOWLEDGE_BASE = {
         {"source_type": "TIMESTAMP / DATETIME", "spanner_type": "TIMESTAMP", "note": "Timezone handling differs."},
         {"source_type": "BLOB", "spanner_type": "BYTES(MAX)", "note": ""},
         {"source_type": "SET", "spanner_type": "ARRAY<STRING>", "note": "Validation dropped."}
+    ],
+    "Oracle": [
+        {"source_type": "CHAR / VARCHAR2 / NVARCHAR2", "spanner_type": "STRING", "note": "Map to STRING(n) or STRING(MAX)."},
+        {"source_type": "NUMBER", "spanner_type": "NUMERIC", "note": "Map to NUMERIC (38,9). Use FLOAT64 if higher precision needed, or INT64 for integers."},
+        {"source_type": "DATE / TIMESTAMP", "spanner_type": "TIMESTAMP", "note": "Oracle DATE contains time."},
+        {"source_type": "CLOB / NCLOB", "spanner_type": "STRING(MAX)", "note": ""},
+        {"source_type": "BLOB / RAW", "spanner_type": "BYTES(MAX)", "note": ""},
+        {"source_type": "ROWID", "spanner_type": "STRING", "note": "Or use Primary Key."}
+    ],
+    "SQL Server": [
+        {"source_type": "INT / BIGINT / SMALLINT / TINYINT", "spanner_type": "INT64", "note": ""},
+        {"source_type": "BIT", "spanner_type": "BOOL", "note": ""},
+        {"source_type": "DECIMAL / NUMERIC / MONEY", "spanner_type": "NUMERIC", "note": "Check precision (38,9)."},
+        {"source_type": "FLOAT / REAL", "spanner_type": "FLOAT64", "note": ""},
+        {"source_type": "CHAR / VARCHAR / TEXT / NTEXT", "spanner_type": "STRING", "note": "Map to STRING(n) or STRING(MAX)."},
+        {"source_type": "DATETIME / DATETIME2 / SMALLDATETIME", "spanner_type": "TIMESTAMP", "note": ""},
+        {"source_type": "UNIQUEIDENTIFIER", "spanner_type": "STRING(36)", "note": "Store UUID as String."},
+        {"source_type": "BINARY / VARBINARY / IMAGE", "spanner_type": "BYTES(MAX)", "note": ""}
     ]
 }

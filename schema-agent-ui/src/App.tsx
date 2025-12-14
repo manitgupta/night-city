@@ -11,7 +11,8 @@ import { IntroductionWizard } from "./components/IntroductionWizard";
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
   { id: 'postgres', name: 'PostgreSQL' },
-  { id: 'oracle', name: 'Oracle' }
+  { id: 'oracle', name: 'Oracle' },
+  { id: 'sqlserver', name: 'SQL Server' }
 ];
 
 function App() {

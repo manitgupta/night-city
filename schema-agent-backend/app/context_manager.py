@@ -44,6 +44,10 @@ class ContextManager:
             return self.mappings.get("PostgreSQL", [])
         elif "mysql" in d:
             return self.mappings.get("MySQL", [])
+        elif "oracle" in d:
+            return self.mappings.get("Oracle", [])
+        elif "sqlserver" in d:
+            return self.mappings.get("SQL Server", [])
         return []
 
     def format_hints_for_prompt(self, ddl_hints: List[Dict[str, str]], feature_hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]]) -> str:

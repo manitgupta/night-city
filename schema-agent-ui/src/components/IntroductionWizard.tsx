@@ -51,7 +51,7 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
     },
     {
       target: '#schema-editor-source',
-      content: 'Here is where you paste your existing SQL (MySQL, PostgreSQL, or Oracle). You can also lock it to prevent accidental edits.',
+      content: 'Here is where you paste your existing SQL (MySQL, PostgreSQL, Oracle, or SQL Server). You can also lock it to prevent accidental edits.',
       placement: 'right',
     },
     {
