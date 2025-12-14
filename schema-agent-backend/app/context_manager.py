@@ -48,6 +48,8 @@ class ContextManager:
             return self.mappings.get("Oracle", [])
         elif "sqlserver" in d:
             return self.mappings.get("SQL Server", [])
+        elif "cassandra" in d or "cql" in d:
+            return self.mappings.get("Cassandra", [])
         return []
 
     def format_hints_for_prompt(self, ddl_hints: List[Dict[str, str]], feature_hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]]) -> str:
@@ -61,13 +63,13 @@ class ContextManager:
         
         # 1. Mappings
         if mapping_rules:
-             block += "#### 1. MAPPING HINTS (Deterministic Data Types)\n"
-             block += "You MUST apply the following type conversions:\n"
-             block += "| Source Type | Spanner Type | Notes |\n"
-             block += "|---|---|---|\n"
-             for rule in mapping_rules:
-                 block += f"| `{rule['source_type']}` | `{rule['spanner_type']}` | {rule['note']} |\n"
-             block += "\n"
+            block += "#### 1. MAPPING HINTS (Deterministic Data Types)\n"
+            block += "You MUST apply the following type conversions:\n"
+            block += "| Source Type | Spanner Type | Notes |\n"
+            block += "|---|---|---|\n"
+            for rule in mapping_rules:
+                block += f"| `{rule['source_type']}` | `{rule['spanner_type']}` | {rule['note']} |\n"
+            block += "\n"
 
         # 2. Feature Hints
         if feature_hints:

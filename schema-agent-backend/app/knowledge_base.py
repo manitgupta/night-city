@@ -170,5 +170,19 @@ MAPPING_RULES_KNOWLEDGE_BASE = {
         {"source_type": "DATETIME / DATETIME2 / SMALLDATETIME", "spanner_type": "TIMESTAMP", "note": ""},
         {"source_type": "UNIQUEIDENTIFIER", "spanner_type": "STRING(36)", "note": "Store UUID as String."},
         {"source_type": "BINARY / VARBINARY / IMAGE", "spanner_type": "BYTES(MAX)", "note": ""}
+    ],
+    "Cassandra": [
+        {"source_type": "BIGINT / INT / SMALLINT / TINYINT / COUNTER", "spanner_type": "INT64", "note": "All integers map to INT64."},
+        {"source_type": "ASCII / TEXT / VARCHAR", "spanner_type": "STRING(MAX)", "note": ""},
+        {"source_type": "BOOLEAN", "spanner_type": "BOOL", "note": ""},
+        {"source_type": "TIMESTAMP", "spanner_type": "TIMESTAMP", "note": ""},
+        {"source_type": "DATE", "spanner_type": "DATE", "note": ""},
+        {"source_type": "FLOAT", "spanner_type": "FLOAT32", "note": ""},
+        {"source_type": "DOUBLE", "spanner_type": "FLOAT64", "note": ""},
+        {"source_type": "DECIMAL / VARINT", "spanner_type": "NUMERIC", "note": "Check precision (38,9)."},
+        {"source_type": "BLOB", "spanner_type": "BYTES(MAX)", "note": ""},
+        {"source_type": "UUID / TIMEUUID / INET", "spanner_type": "STRING(MAX)", "note": "Stored as String."},
+        {"source_type": "LIST / SET", "spanner_type": "ARRAY<T>", "note": "Maps to ARRAY of corresponding Spanner type."},
+        {"source_type": "MAP", "spanner_type": "JSON", "note": "Maps to JSON."}
     ]
 }

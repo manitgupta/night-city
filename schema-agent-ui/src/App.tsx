@@ -12,7 +12,8 @@ const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
   { id: 'postgres', name: 'PostgreSQL' },
   { id: 'oracle', name: 'Oracle' },
-  { id: 'sqlserver', name: 'SQL Server' }
+  { id: 'sqlserver', name: 'SQL Server' },
+  { id: 'cassandra', name: 'Cassandra' }
 ];
 
 function App() {
