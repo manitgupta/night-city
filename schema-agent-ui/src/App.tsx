@@ -26,7 +26,7 @@ function App() {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
-  const [isAutoMode, setIsAutoMode] = useState(false); // Auto-mode state
+  const [isAutoMode, setIsAutoMode] = useState(true); // Auto-mode state
 
   // Replaced local isReviewing/originalOutputCode with Store state
   const [showMigrateDialog, setShowMigrateDialog] = useState(false);
