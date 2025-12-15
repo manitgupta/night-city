@@ -392,8 +392,9 @@ class SchemaAgentService:
         import json
         
         full_text = ""
+        full_text = ""
         async for chunk in self.analyze_fix_stream(source_ddl, generated_ddl, error_message):
-            if chunk["type"] == "thought":
+            if chunk["type"] == "raw":
                 full_text += chunk["content"]
         
         # Now parse the full text
@@ -413,7 +414,6 @@ class SchemaAgentService:
             return json.loads(clean_text)
         except Exception as e:
             logger.error(f"Failed to parse analysis JSON: {e}")
-            # If parsing fails, maybe we can extract fields with regex or just fail gracefully
             return {
                 "explanation": f"Failed to parse model response. Raw text: {text[:100]}...",
                 "fixed_ddl": original_ddl 
