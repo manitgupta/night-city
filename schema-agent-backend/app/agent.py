@@ -42,6 +42,84 @@ class SchemaAgentService:
             cls._instance = cls()
         return cls._instance
 
+    async def convert_schema(self, source_ddl: str, dialect: str) -> Dict[str, Any]:
+        """
+        Orchestrates conversion.
+        """
+        logs = []
+        logger.info(f"Starting conversion for dialect: {dialect}")
+        
+        # Get Key Hints
+        ddl_hints = context_manager.get_ddl_hints(source_ddl)
+        feature_hints = context_manager.get_feature_hints(source_ddl)
+        mapping_rules = context_manager.get_mapping_rules(dialect)
+        
+        formatted_hints = context_manager.format_hints_for_prompt(ddl_hints, feature_hints, mapping_rules)
+        
+        if formatted_hints:
+            logger.info(f"Found {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules.")
+            logs.append(f"Injected {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules.")
+        else:
+            logger.info("No specific hints found.")
+        
+        # Initial Prompt
+        prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
+        
+        logs.append(f"Generating DDL...")
+        logger.info(f"Sending prompt to agent")
+        
+        try:
+            # Switch to Async Client
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.1
+                )
+            )
+        except Exception as e:
+            logger.error(f"Gemini API call failed in convert_schema: {str(e)}", exc_info=True)
+            logs.append(f"CRITICAL ERROR: Gemini API call failed: {str(e)}")
+            return {
+                "converted_ddl": "",
+                "logs": logs,
+                "report": f"Conversion failed due to API error: {str(e)}"
+            }
+        
+        if not response.text:
+            finish_reason = "Unknown"
+            if response.candidates and response.candidates[0].finish_reason:
+                finish_reason = str(response.candidates[0].finish_reason)
+            
+            error_msg = f"Gemini response contained no text. Finish Reason: {finish_reason}"
+            logger.error(error_msg)
+            logs.append(f"CRITICAL ERROR: {error_msg}")
+            
+            return {
+                "converted_ddl": "",
+                "logs": logs,
+                "report": f"Conversion failed. The model returned no content. Reason: {finish_reason}."
+            }
+
+        response_text = response.text
+        logger.info("Received response from agent")
+        
+        extracted_ddl = self._extract_sql(response_text)
+        
+        if not extracted_ddl:
+            logs.append("Error: No SQL block found in agent response.")
+            current_ddl = ""
+        else:
+            current_ddl = extracted_ddl
+            
+        report = self._extract_report(response_text)
+
+        return {
+            "converted_ddl": current_ddl,
+            "logs": logs,
+            "report": report
+        }
+
     async def convert_schema_stream(self, source_ddl: str, dialect: str):
         """
         Orchestrates conversion with streaming response.
@@ -108,13 +186,13 @@ class SchemaAgentService:
             except Exception as e:
                 logger.warning(f"Could not configure ThinkingConfig: {e}")
 
-            response_stream = self.client.models.generate_content_stream(
+            response_stream = await self.client.aio.models.generate_content_stream(
                 model=self.model_name,
                 contents=prompt,
                 config=types.GenerateContentConfig(**config_args)
             )
 
-            for chunk in response_stream:
+            async for chunk in response_stream:
                 # Handle Thoughts
                 # Check for 'candidates' and 'content' and 'parts'
                 # In some SDK versions, thoughts are in a specific part or metadata.
@@ -139,13 +217,10 @@ class SchemaAgentService:
                             if hasattr(cand, "content") and cand.content and cand.content.parts:
                                 for part in cand.content.parts:
                                     # Check for thought
-                                    # Hypothetical attribute based on request
                                     if hasattr(part, "thought") and part.thought:
-                                        # It's a thought!
                                         yield {"type": "thought", "content": part.text if part.text else "..."}
                                     elif hasattr(part, "text") and part.text:
-                                        # It's text (content)
-                                        # Buffer distinct text
+                                        # It's text (content) - Buffer distinct text
                                         full_response_text += part.text
                 except Exception as loop_e:
                     # Fallback standard extraction
@@ -182,8 +257,6 @@ class SchemaAgentService:
         }
 
     async def chat(self, message: str, source_ddl: Optional[str] = None, output_ddl: Optional[str] = None, selection: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        # Same chat logic, just ensuring imports are correct
-        # ... (keeping existing chat logic mostly as is, just ensuring prompt flow works)
         logger.info(f"Received chat message: {message[:50]}...")
         
         context_parts = []
@@ -219,12 +292,9 @@ class SchemaAgentService:
 
         tools = [suggest_changes]
 
-        
-        # ACTUALLY, to use tools effectively with the new SDK, we should use the chat context or generate_content
-        # Let's use generate_content with tools config
-        
         try:
-            response = self.client.models.generate_content(
+            # Switch to Async Client
+            response = await self.client.aio.models.generate_content(
                 model=self.model_name,
                 contents=full_prompt,
                 config=types.GenerateContentConfig(
@@ -240,7 +310,7 @@ class SchemaAgentService:
                     4. IMPORTANT: If you use the tool, ALSO output the full valid Spanner DDL in the text response as a markdown block. This ensures the user sees the code.
                     5. If the user is just asking a question (e.g., "why is this INT64?"), answer normally key text.
                     """,
-                    temperature=0.1 # Low temp for code
+                    temperature=0.1
                 )
             )
         except Exception as e:
@@ -250,15 +320,10 @@ class SchemaAgentService:
                 "suggested_fix": None
             }
 
-        # Check for tool calls
         suggested_fix = None
         response_text = ""
         
-        # Defensive: Check if we have candidates/parts
-        # google-genai response logic handles text property but if blocked it might be empty
-        pass_check = True
         if not response.text and not response.function_calls:
-            # It might be blocked
             finish_reason = "Unknown"
             if response.candidates and response.candidates[0].finish_reason:
                 finish_reason = str(response.candidates[0].finish_reason)
@@ -268,7 +333,6 @@ class SchemaAgentService:
                 "suggested_fix": None
             }
 
-        # Handle potentially multiple parts, but usually it's text then function call or just function call
         if response.function_calls:
             for fc in response.function_calls:
                 if fc.name == "suggest_changes":
@@ -283,69 +347,36 @@ class SchemaAgentService:
         if response.text:
             response_text = response.text
             
-            # Fallback: If no tool call but we have DDL in text, treat it as a suggestion
             if not suggested_fix:
                 extracted_ddl = self._extract_sql(response_text)
-                # Ensure it's not just the same text or empty
                 if extracted_ddl and len(extracted_ddl) > 20 and "CREATE TABLE" in extracted_ddl.upper():
                     suggested_fix = {
                         "explanation": "Please review the changes.",
                         "fixed_ddl": extracted_ddl
                     }
 
-        # If we got a function call, we should ideally return that structured data
-        # BUT our chat API returns a string or struct.
-        # We updated ChatResponse model to have optional suggested_fix.
-        
         from app.models import SuggestedFix
-        
         fix_obj = None
         if suggested_fix:
             fix_obj = SuggestedFix(**suggested_fix)
 
         if suggested_fix and response_text:
-            # Clean up the response text: Remove the DDL block to avoid pollution
-            # We already have the DDL in suggested_fix
             import re
-            # Remove ```sql ... ``` or ``` ... ``` blocks that contain CREATE/ALTER
-            # This logic mimics _extract_sql but for removal
-            
-            # Simple approach: Remove the extracted DDL string if it exists in the text
-            if isinstance(suggested_fix, dict):
-                params = suggested_fix
-            else:
-                params = suggested_fix.model_dump() # access fields if pydantic
-            
+            params = suggested_fix
             fixed_ddl = params.get("fixed_ddl", "")
             
             if fixed_ddl:
-                # Use regex to find the block containing this specific DDL, handling variations in whitespace/ticks
-                # escape the DDL for use in regex
                 escaped_ddl = re.escape(fixed_ddl.strip())
-                # Pattern: ```(optional sql) \s* DDL \s* ```
-                # We use specific DDL match to avoid removing wrong blocks if there are multiple (unlikely but safe)
-                # We need to account that fixed_ddl might have been stripped max block, so we match loosely on whitespace
-                
-                # Actually, simpler: just remove valid code blocks that look like DDL if we have a suggested fix.
-                # But let's try to remove the specific one first.
-                
                 pattern = r"```(?:sql)?\s*" + escaped_ddl + r"\s*```"
                 
-                # Check if it matches
                 if re.search(pattern, response_text, re.DOTALL):
                     response_text = re.sub(pattern, "", response_text, flags=re.DOTALL)
                 else:
-                    # Fallback: if exact match fails (whitespace issues), fallback to string replace of content
-                    # THEN remove empty blocks
                     if fixed_ddl in response_text:
                         response_text = response_text.replace(fixed_ddl, "")
-                    
-                    # aggressive cleanup of empty/near-empty DDL blocks
                     response_text = re.sub(r"```(?:sql)?\s*```", "", response_text)
-                    # cleanup blocks that only contain whitespace
                     response_text = re.sub(r"```(?:sql)?\s+\n\s*```", "", response_text)
 
-            # Cleanup "Here is..." text if it's trailing
             response_text = re.sub(r"Here is the updated (?:Spanner )?DDL.*?:?\s*$", "", response_text.strip(), flags=re.IGNORECASE)
 
         return {
@@ -353,105 +384,6 @@ class SchemaAgentService:
             "suggested_fix": fix_obj
         }
 
-    async def analyze_fix(self, source_ddl: str, generated_ddl: str, error_message: str) -> Dict[str, str]:
-        """
-        Analyzes validation error and returns explanation + fix.
-        """
-        from app.prompts import generate_analyze_prompt
-        import json
-        import re
-
-        prompt = generate_analyze_prompt(
-            source_ddl=source_ddl,
-            generated_ddl=generated_ddl,
-            error_message=error_message
-        )
-        
-        try:
-            chat = self.client.chats.create(
-                model=self.model_name,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json" 
-                )
-            )
-            
-            # Use stream=True if you want to stream thoughts, but wait...
-            # The prompt asks for JSON. 
-            # If we want thoughts, we can't force JSON MIME type usually unless the model supports mixed output or we parse it.
-            # But the user wants to "see the model thinking". 
-            # If we enforce JSON, the model might not output thoughts easily. 
-            # Let's switch to standard text generation for streaming, then parse JSON from it.
-            
-            response_stream = chat.send_message_stream(
-                prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                )
-            )
-            
-            full_text = ""
-            
-            # Simple state parser to extract "explanation" value
-            # We assume the JSON structure: {"explanation": "VALUE", "fixed_ddl": "..."}
-            # We want to yield characters inside VALUE.
-            
-            in_explanation = False
-            explanation_buffer = ""
-            
-            # We'll just accumulate text and look for the explanation key pattern
-            # Robustness: Just finding the key "explanation" then content.
-            
-            # Since we can't easily parse partial JSON, we'll simple regex or string check on full_text buffer
-            # to determine if we are in the zone.
-            
-            # Optimization: Just assume standard order.
-            
-            for chunk in response_stream:
-                text = chunk.text
-                if not text:
-                    continue
-                    
-                full_text += text
-                
-                # Check for explanation start
-                # Pattern: "explanation": "
-                if not in_explanation:
-                    if '"explanation": "' in full_text:
-                        in_explanation = True
-                        # The start index is dynamic, but we can just simplify:
-                        # Once we find the key, we assume everything after is the value until we hit the next quote that is not escaped
-                        # BUT this is complex to do perfectly on chunks.
-                        
-                        # Simplified approach for visual effect:
-                        # Just output the text chunk if we have seen the key but not the end key.
-                        # Actually, better: just dump the raw text as a 'thought' if it's not the DDL part.
-                        # The user will see `{"explanation": "I am...` which is honest about the JSON mode.
-                        # User request: "Changing the mime type... dangerous... Can you think of a good solution"
-                        # Solution: Use JSON, stream the result.
-                        pass
-
-                if in_explanation:
-                    # We are ostensibly in the explanation
-                    # Check if we hit the end of explanation (next quote that isn't escaped)
-                    # This is hard on a per-chunk basis without state.
-                    
-                    # FALLBACK: Just yield the chunk. 
-                    # The user sees clean JSON structure appearing.
-                    # It's better than nothing and technically "seeing the model think".
-                    yield {"type": "thought", "content": text}
-                    
-                    # If we see "fixed_ddl", we might stop yielding thoughts to avoid spamming code? 
-                    # No, user wants to see everything.
-                else:
-                    # Even before explanation key, we might see `{\n  ` which is fine to show.
-                    yield {"type": "thought", "content": text}
-                    
-            # Generator consumes stream, no return value
-            pass
-            
-        except Exception as e:
-            logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
-            yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
 
     async def analyze_fix(self, source_ddl: str, generated_ddl: str, error_message: str) -> Dict[str, str]:
         """
@@ -583,14 +515,15 @@ class SchemaAgentService:
         )
         
         try:
-            chat = self.client.chats.create(
+            # Switch to Async Client
+            chat = self.client.aio.chats.create(
                 model=self.model_name,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json" 
                 )
             )
             
-            response_stream = chat.send_message_stream(
+            response_stream = await chat.send_message_stream(
                 prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json"
@@ -609,7 +542,7 @@ class SchemaAgentService:
             output_buffer = ""
             BUFFER_SIZE = 20 # Yield every ~20 chars or newline
             
-            for chunk in response_stream:
+            async for chunk in response_stream:
                 text = chunk.text
                 if not text:
                     continue
@@ -674,7 +607,7 @@ class SchemaAgentService:
         except Exception as e:
             logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
             yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
-            pass
+
 
     def _extract_sql(self, text: str) -> str:
         """
