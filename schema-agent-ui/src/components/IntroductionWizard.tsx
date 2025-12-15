@@ -59,6 +59,10 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
       content: 'Make sure to select the correct source dialect so the agent understands your schema nuances.',
     },
     {
+      target: '#auto-mode-toggle',
+      content: 'Toggle "Auto mode" to enable a multi-turn self-correction loop. The agent will iteratively validate and repair the schema using a real Spanner instance until it is perfect. (Slower but accurate)',
+    },
+    {
       target: '#convert-button',
       content: 'Click here to summon the agent! It will convert your schema to Spanner DDL, applying best practices automatically.',
     },

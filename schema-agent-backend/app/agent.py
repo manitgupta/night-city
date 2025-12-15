@@ -374,41 +374,307 @@ class SchemaAgentService:
                     response_mime_type="application/json" 
                 )
             )
-            response = chat.send_message(prompt)
             
-            # Defensive check
-            if not response.text:
-                finish_reason = "Unknown"
-                if response.candidates and response.candidates[0].finish_reason:
-                    finish_reason = str(response.candidates[0].finish_reason)
-                logger.error(f"AnalyzeFix response blocked/empty. Reason: {finish_reason}")
-                return {
-                    "explanation": f"Model failed to analyze error. (Reason: {finish_reason})",
-                    "fixed_ddl": generated_ddl
-                }
+            # Use stream=True if you want to stream thoughts, but wait...
+            # The prompt asks for JSON. 
+            # If we want thoughts, we can't force JSON MIME type usually unless the model supports mixed output or we parse it.
+            # But the user wants to "see the model thinking". 
+            # If we enforce JSON, the model might not output thoughts easily. 
+            # Let's switch to standard text generation for streaming, then parse JSON from it.
+            
+            response_stream = chat.send_message_stream(
+                prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            
+            full_text = ""
+            
+            # Simple state parser to extract "explanation" value
+            # We assume the JSON structure: {"explanation": "VALUE", "fixed_ddl": "..."}
+            # We want to yield characters inside VALUE.
+            
+            in_explanation = False
+            explanation_buffer = ""
+            
+            # We'll just accumulate text and look for the explanation key pattern
+            # Robustness: Just finding the key "explanation" then content.
+            
+            # Since we can't easily parse partial JSON, we'll simple regex or string check on full_text buffer
+            # to determine if we are in the zone.
+            
+            # Optimization: Just assume standard order.
+            
+            for chunk in response_stream:
+                text = chunk.text
+                if not text:
+                    continue
+                    
+                full_text += text
                 
-            text = response.text
+                # Check for explanation start
+                # Pattern: "explanation": "
+                if not in_explanation:
+                    if '"explanation": "' in full_text:
+                        in_explanation = True
+                        # The start index is dynamic, but we can just simplify:
+                        # Once we find the key, we assume everything after is the value until we hit the next quote that is not escaped
+                        # BUT this is complex to do perfectly on chunks.
+                        
+                        # Simplified approach for visual effect:
+                        # Just output the text chunk if we have seen the key but not the end key.
+                        # Actually, better: just dump the raw text as a 'thought' if it's not the DDL part.
+                        # The user will see `{"explanation": "I am...` which is honest about the JSON mode.
+                        # User request: "Changing the mime type... dangerous... Can you think of a good solution"
+                        # Solution: Use JSON, stream the result.
+                        pass
+
+                if in_explanation:
+                    # We are ostensibly in the explanation
+                    # Check if we hit the end of explanation (next quote that isn't escaped)
+                    # This is hard on a per-chunk basis without state.
+                    
+                    # FALLBACK: Just yield the chunk. 
+                    # The user sees clean JSON structure appearing.
+                    # It's better than nothing and technically "seeing the model think".
+                    yield {"type": "thought", "content": text}
+                    
+                    # If we see "fixed_ddl", we might stop yielding thoughts to avoid spamming code? 
+                    # No, user wants to see everything.
+                else:
+                    # Even before explanation key, we might see `{\n  ` which is fine to show.
+                    yield {"type": "thought", "content": text}
+                    
+            # Generator consumes stream, no return value
+            pass
+            
         except Exception as e:
-            logger.error(f"Gemini API call failed in analyze_fix: {str(e)}", exc_info=True)
-            return {
-                "explanation": f"Error analyzing fix: {str(e)}",
-                "fixed_ddl": generated_ddl
-            }
+            logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
+            yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
+
+    async def analyze_fix(self, source_ddl: str, generated_ddl: str, error_message: str) -> Dict[str, str]:
+        """
+        Legacy/Sync-like wrapper for analyze_fix_stream to maintain API compatibility.
+        """
+        import json
         
+        full_text = ""
+        async for chunk in self.analyze_fix_stream(source_ddl, generated_ddl, error_message):
+            if chunk["type"] == "thought":
+                full_text += chunk["content"]
+        
+        # Now parse the full text
+        return self._parse_analysis_response(full_text, generated_ddl)
+
+    def _parse_analysis_response(self, text: str, original_ddl: str) -> Dict[str, str]:
+        import json
         try:
             # Clean potential markdown
+            clean_text = text
             if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
+                clean_text = text.split("```json")[1].split("```")[0]
             elif "```" in text:
-                text = text.split("```")[0]
-                
-            return json.loads(text)
+                clean_text = text.split("```")[0]
+            
+            # Attempt to parse
+            return json.loads(clean_text)
         except Exception as e:
             logger.error(f"Failed to parse analysis JSON: {e}")
+            # If parsing fails, maybe we can extract fields with regex or just fail gracefully
             return {
-                "explanation": "Failed to parse model response.",
-                "fixed_ddl": generated_ddl # Fallback
+                "explanation": f"Failed to parse model response. Raw text: {text[:100]}...",
+                "fixed_ddl": original_ddl 
             }
+
+    async def multi_turn_convert_schema_stream(self, source_ddl: str, dialect: str, max_retries: int = 10):
+        """
+        Multi-turn conversion with self-correction loop.
+        """
+        from app.spanner_tool import SpannerVerificationTool
+        
+        # 1. Initial Generation
+        current_ddl = ""
+        current_report = ""
+        logs = []
+        
+        logger.info(f"Starting Multi-Turn Conversion (Max Retries: {max_retries})")
+        
+        initial_stream = self.convert_schema_stream(source_ddl, dialect)
+        
+        async for chunk in initial_stream:
+            yield chunk
+            if chunk["type"] == "result":
+                current_ddl = chunk.get("converted_ddl", "")
+                current_report = chunk.get("report", "")
+                if chunk.get("logs"):
+                    logs.extend(chunk["logs"])
+        
+        if not current_ddl:
+            yield {"type": "log", "content": "Initial generation failed to produce DDL. Aborting auto-loop."}
+            return
+
+        # 2. Loop
+        verifier = SpannerVerificationTool()
+        
+        for i in range(max_retries):
+            yield {"type": "log", "content": f"--- Auto-Correction Pass {i+1}/{max_retries} ---"}
+            yield {"type": "thought", "content": f"\n\n**Analysis & Repair Loop (Pass {i+1})**\nVerifying DDL with Spanner..."}
+            
+            verification = await verifier.verify_ddl(current_ddl, background_tasks=None)
+            
+            if verification["valid"]:
+                yield {"type": "log", "content": "Verification Successful! ✅"}
+                yield {"type": "thought", "content": "\n\nLimit testing passed. Schema is valid."}
+                yield {
+                    "type": "result", 
+                    "converted_ddl": current_ddl, 
+                    "report": current_report + f"\n\n**Auto-Correction**: Verified valid after {i+1} pass(es).",
+                    "logs": logs
+                }
+                return
+            else:
+                errors = verification["errors"]
+                error_str = "\n".join(errors)
+                yield {"type": "log", "content": f"Validation Errors: {error_str}"}
+                yield {"type": "thought", "content": f"\n\nFound issues: \n```\n{error_str}\n```\nAnalyzing and repairing...\n\n"}
+                
+                # Streaming Fix
+                full_analysis_text = ""
+                async for fix_chunk in self.analyze_fix_stream(source_ddl, current_ddl, error_str):
+                    if fix_chunk["type"] == "thought":
+                        yield fix_chunk
+                    elif fix_chunk["type"] == "raw":
+                        full_analysis_text += fix_chunk["content"]
+                
+                # Parse using the full raw JSON text
+                analysis = self._parse_analysis_response(full_analysis_text, current_ddl)
+                
+                if analysis.get("fixed_ddl"):
+                    current_ddl = analysis["fixed_ddl"]
+                    yield {"type": "log", "content": "Applied fix provided by agent."}
+                else:
+                    yield {"type": "log", "content": "Agent failed to provide a valid fix structure."}
+                    if analysis.get("fixed_ddl") == current_ddl:
+                         yield {"type": "log", "content": "Agent returned same DDL. Stopping loop."}
+                         break
+
+        yield {"type": "log", "content": f"Max retries ({max_retries}) reached. Returning last best effort."}
+        yield {
+            "type": "result", 
+            "converted_ddl": current_ddl, 
+            "report": current_report + f"\n\n**Auto-Correction**: Max retries reached. Validation may still verify errors.",
+            "logs": logs
+        }
+
+    async def analyze_fix_stream(self, source_ddl: str, generated_ddl: str, error_message: str):
+        """
+        Analyzes validation error and streams explanation + fix.
+        Yields:
+          - {"type": "thought", "content": clean_text_segment} -> For UI display
+          - {"type": "raw", "content": raw_text_segment} -> For reconstructing full JSON response
+        """
+        from app.prompts import generate_analyze_prompt
+        
+        prompt = generate_analyze_prompt(
+            source_ddl=source_ddl,
+            generated_ddl=generated_ddl,
+            error_message=error_message
+        )
+        
+        try:
+            chat = self.client.chats.create(
+                model=self.model_name,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json" 
+                )
+            )
+            
+            response_stream = chat.send_message_stream(
+                prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            
+            # Streaming Parser State
+            in_explanation_value = False
+            escape_next = False
+            
+            # We scan for the sequence: "explanation": "
+            detection_buffer = ""
+            key_pattern = '"explanation": "'
+            
+            # Output buffer to reduce yield frequency
+            output_buffer = ""
+            BUFFER_SIZE = 20 # Yield every ~20 chars or newline
+            
+            for chunk in response_stream:
+                text = chunk.text
+                if not text:
+                    continue
+                
+                # Always yield raw for reconstruction
+                yield {"type": "raw", "content": text}
+                
+                if not in_explanation_value:
+                    detection_buffer += text
+                    if key_pattern in detection_buffer:
+                        start_index = detection_buffer.find(key_pattern) + len(key_pattern)
+                        in_explanation_value = True
+                        
+                        value_part = detection_buffer[start_index:]
+                        
+                        for char in value_part:
+                            if escape_next:
+                                if char == 'n': output_buffer += "\n"
+                                elif char == 't': output_buffer += "\t"
+                                elif char == '"': output_buffer += '"'
+                                else: output_buffer += char 
+                                escape_next = False
+                            elif char == '\\':
+                                escape_next = True
+                            elif char == '"':
+                                in_explanation_value = False
+                                break 
+                            else:
+                                output_buffer += char
+                            
+                            # Check buffer
+                            if len(output_buffer) >= BUFFER_SIZE or output_buffer.endswith("\n"):
+                                yield {"type": "thought", "content": output_buffer}
+                                output_buffer = ""
+
+                        detection_buffer = ""
+                        
+                else:
+                    for char in text:
+                        if escape_next:
+                            if char == 'n': output_buffer += "\n"
+                            elif char == 't': output_buffer += "\t"
+                            elif char == '"': output_buffer += '"'
+                            else: output_buffer += char
+                            escape_next = False
+                        elif char == '\\':
+                            escape_next = True
+                        elif char == '"':
+                            in_explanation_value = False
+                            break
+                        else:
+                            output_buffer += char
+                        
+                        # Check buffer
+                        if len(output_buffer) >= BUFFER_SIZE or output_buffer.endswith("\n"):
+                            yield {"type": "thought", "content": output_buffer}
+                            output_buffer = ""
+            
+            # Yield remaining buffer
+            if output_buffer:
+                yield {"type": "thought", "content": output_buffer}
+        except Exception as e:
+            logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
+            yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
+            pass
 
     def _extract_sql(self, text: str) -> str:
         """
@@ -448,5 +714,6 @@ class SchemaAgentService:
         
         return "Conversion report not available."
 
+# Global instance
 # Global instance
 agent_service = SchemaAgentService.get_instance()

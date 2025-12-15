@@ -26,6 +26,7 @@ function App() {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
+  const [isAutoMode, setIsAutoMode] = useState(false); // Auto-mode state
 
   // Replaced local isReviewing/originalOutputCode with Store state
   const [showMigrateDialog, setShowMigrateDialog] = useState(false);
@@ -185,68 +186,41 @@ function App() {
     try {
       let thoughtBuffer = "";
 
-      const result = await api.convertSchemaStream(sourceCode, sourceDialect, (chunk) => {
-        if (chunk.type === 'thought') {
-          // Update the thinking message
-          // We want a slick UI, maybe just appending thoughts?
-          // Or maybe replacing content?
-          // "Thinking... I am analyzing... I see this..."
-          // Let's append with newlines or just show the latest thought?
-          // User said "show model's thinking".
-          // Let's append but maybe debounce in a real app. Here we just update.
-          // We'll format thoughts as italic or in a specific block if possible, 
-          // but standard markdown is what we have in ChatInterface.
+      // Note: both have same signature for (source, dialect, callback)
+      // Actually convertSchemaStream is a method on api object, so we need to bind or call directly.
+      // We can just call conditionally.
 
+      const streamCallback = (chunk: any) => {
+        if (chunk.type === 'thought') {
           if (chunk.content) {
             thoughtBuffer += chunk.content;
-            // Update the message in store (we assume useStore has updateMessage or we just re-add/replace)
-            // Actually useStore might not have updateMessage. Let's check.
-            // If not, we might need to remove and add, which is flickery.
-            // Wait, useStore definition isn't fully visible but I can infer.
-            // If I can't update, I'll delete and add?
-            // Let's assume we can't easily update nicely without lag if we spam actions.
-            // But for now, let's try to update the LAST message if it matches ID?
-            // The store likely has `messages` array.
-
-            // NOTE: To make it slick, we should probably have a "thinking" state in the ChatInterface 
-            // or updates to the store.
-            // Since I can't easily change the Store interface right now without checking it,
-            // I will check if I can just use `addMessage` to replace?
-            // No, `addMessage` usually appends.
-
-            // Let's look at `useStore`.
-            // For this step, I will assume we can't update easily and just show "Thinking..." and maybe 
-            // major progress updates?
-            // BUT the user wants "interactive see the model's process".
-
-            // Ideally: Modify Store to support `updateMessage(id, content)`.
-            // I'll check store first.
+            // Update logic...
+            useStore.setState((state: any) => ({
+              messages: state.messages.map((m: any) =>
+                m.id === thinkingMsgId
+                  ? { ...m, content: thoughtBuffer || "Thinking..." }
+                  : m
+              )
+            }));
           }
         } else if (chunk.type === 'log') {
-          // Maybe show logs as thoughts too?
           if (chunk.content) {
             thoughtBuffer += `\n> ${chunk.content}\n`;
+            useStore.setState((state: any) => ({
+              messages: state.messages.map((m: any) =>
+                m.id === thinkingMsgId
+                  ? { ...m, content: thoughtBuffer || "Thinking..." }
+                  : m
+              )
+            }));
           }
         }
+      };
 
-        if (thoughtBuffer) {
-          // Update the message (we'll implement update logic or hack it by referencing store)
-          // Since I can't see store code, I'll assume I need to implement `updateLastMessage` or similar if missing.
-          // Let's just assume for now I will use `updateStreamingMessage` if I add it, or just use a local state 
-          // and pass it to chat? 
-          // ChatInterface reads from store.
+      const result = isAutoMode
+        ? await api.convertSchemaAuto(sourceCode, sourceDialect, streamCallback)
+        : await api.convertSchemaStream(sourceCode, sourceDialect, streamCallback);
 
-          // Plan B: Just update the same message ID if the store supports it, or valid React state if ChatInterface supports it.
-          // Actually, `useStore` is from zustand usually.
-          useStore.setState((state: any) => ({
-            messages: state.messages.map((m: any) =>
-              m.id === thinkingMsgId
-                ? { ...m, content: thoughtBuffer || "Thinking..." }
-                : m
-            )
-          }));
-        }
-      });
 
       setOutputCode(result.converted_ddl);
 
@@ -267,18 +241,36 @@ function App() {
 
       // Add helpful follow-up message
       setTimeout(() => {
-        addMessage({
-          id: Date.now().toString(),
-          role: 'agent',
-          content: "While I've done my best to convert your schema, I might have missed a nuance or two. \n\nI recommend clicking **Validate** to run a syntax check. If any issues are found, I can use the compiler errors to help you iteratively refine and fix the schema! 🛠️",
-          isReport: false,
-          isHelpful: true
-        });
-        // Also trigger the Validate button highlight
-        setShowValidateHighlight(true);
-        // Highlight lasts for 6 seconds to ensure user sees it
-        setTimeout(() => setShowValidateHighlight(false), 6000);
-      }, 500); // Small delay for effect
+        const isAutoSuccess = isAutoMode && result.report && result.report.includes("Verified valid");
+
+        if (isAutoSuccess) {
+          // Auto-mode success: Enable Migrate, stop pulsing
+          setValidationResult({ valid: true, errors: [] });
+          setShowValidateHighlight(false);
+
+          addMessage({
+            id: Date.now().toString(),
+            role: 'agent',
+            content: "Schema successfully generated and verified! 🚀\n\nI have confirmed the schema is valid. You can now press **Migrate** to apply it directly to your database.",
+            isReport: false,
+            isHelpful: true
+          });
+        } else {
+          // Standard flow or Auto-mode failure
+          // Always highlight if not successful auto-migration
+          setShowValidateHighlight(true);
+          // Highlight lasts for 6 seconds
+          setTimeout(() => setShowValidateHighlight(false), 6000);
+
+          addMessage({
+            id: Date.now().toString(),
+            role: 'agent',
+            content: "While I've done my best to convert your schema, I might have missed a nuance or two. \n\nI recommend clicking **Validate** to run a syntax check. If any issues are found, I can use the compiler errors to help you iteratively refine and fix the schema! 🛠️",
+            isReport: false,
+            isHelpful: true
+          });
+        }
+      }, 500);
 
     } catch (error) {
       console.error("Conversion error:", error);
@@ -514,20 +506,55 @@ function App() {
                     </div>
                   )}
 
-                  {sourceCode.trim() && sourceCode.split('\n').length <= 1000 && (
+                  {/* Always show controls, but disable if invalid source */}
+                  <div className="flex items-center gap-2">
+                    {/* Auto Mode Toggle with Slick Switch */}
+                    <div id="auto-mode-toggle" className={`group relative flex items-center mr-3 ${!sourceCode.trim() ? "opacity-50 pointer-events-none" : ""}`}>
+                      <button
+                        onClick={() => setIsAutoMode(!isAutoMode)}
+                        disabled={!sourceCode.trim()}
+                        className={`
+                            relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900 ring-1 ring-inset ring-white/5
+                            ${isAutoMode ? 'bg-indigo-600' : 'bg-zinc-700'}
+                          `}
+                      >
+                        <span className="sr-only">Enable Auto Mode</span>
+                        <span
+                          className={`
+                              inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 ease-out shadow-sm
+                              ${isAutoMode ? 'translate-x-[18px]' : 'translate-x-1'}
+                            `}
+                        />
+                      </button>
+                      <label
+                        onClick={() => sourceCode.trim() && setIsAutoMode(!isAutoMode)}
+                        className="ml-2 text-xs font-medium text-zinc-400 cursor-pointer group-hover:text-zinc-200 transition-colors select-none"
+                      >
+                        Auto mode
+                      </label>
+
+                      {/* Refined Floating Tooltip - Positioned BELOW to avoid clipping */}
+                      <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-max max-w-[200px] p-2.5 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700/50 rounded-lg text-xs text-zinc-300 shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-200 transform group-hover:translate-y-0 -translate-y-2 pointer-events-none z-[100]">
+                        <div className="font-semibold text-indigo-400 mb-0.5">Auto-Correction Loop</div>
+                        <div className="text-zinc-400 leading-tight">The agent runs a multi-turn loop to iteratively validate & repair the schema using Spanner as a feedback loop. This is slower but more accurate.</div>
+                        {/* Arrow pointing UP */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-zinc-900/95"></div>
+                      </div>
+                    </div>
+
                     <button
                       id="convert-button"
                       onClick={handleConvert}
-                      disabled={!sourceDialect || isConverting}
-                      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceDialect
-                          ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
-                          : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
+                      disabled={!sourceCode.trim() || !sourceDialect || isConverting || sourceCode.split('\n').length > 1000}
+                      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceCode.trim() && sourceDialect && !isConverting && sourceCode.split('\n').length <= 1000
+                        ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
+                        : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
                         } ${isConverting ? "opacity-80 cursor-wait" : ""}`}
                     >
                       <Wand2 size={14} className={isConverting ? "animate-spin" : ""} />
                       {isConverting ? "Converting..." : "Convert"}
                     </button>
-                  )}
+                  </div>
                 </div>
               }
             />

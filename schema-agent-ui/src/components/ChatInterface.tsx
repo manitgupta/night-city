@@ -127,6 +127,9 @@ export function ChatInterface() {
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
+                      pre: ({ node, ...props }) => (
+                        <pre {...props} className="whitespace-pre-wrap break-words overflow-x-hidden max-w-full bg-zinc-900 rounded-lg p-2" />
+                      ),
                       code(props) {
                         const { children, className, node, ref, ...rest } = props
                         const match = /language-(\w+)/.exec(className || '')
@@ -137,7 +140,8 @@ export function ChatInterface() {
                             children={children ? String(children).replace(/\n$/, '') : ''}
                             language={match[1]}
                             style={vscDarkPlus}
-                            customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b' }}
+                            wrapLongLines={true}
+                            customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                           />
                         ) : (
                           <code {...rest} className={className}>

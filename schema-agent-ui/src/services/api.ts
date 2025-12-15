@@ -99,7 +99,24 @@ export const api = {
         sourceDialect: string,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
-        const response = await fetch(`${API_BASE_URL}/convert`, {
+        return this._streamRequest(`${API_BASE_URL}/convert`, sourceDdl, sourceDialect, onChunk);
+    },
+
+    async convertSchemaAuto(
+        sourceDdl: string,
+        sourceDialect: string,
+        onChunk: (chunk: any) => void
+    ): Promise<ConversionResponse> {
+        return this._streamRequest(`${API_BASE_URL}/multi_turn_convert_schema_stream`, sourceDdl, sourceDialect, onChunk);
+    },
+
+    async _streamRequest(
+        url: string,
+        sourceDdl: string,
+        sourceDialect: string,
+        onChunk: (chunk: any) => void
+    ): Promise<ConversionResponse> {
+        const response = await fetch(url, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -127,14 +144,12 @@ export const api = {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-                // Keep the last partial line in the buffer
                 buffer = lines.pop() || "";
 
                 for (const line of lines) {
                     if (!line.trim()) continue;
                     try {
                         const data = JSON.parse(line);
-                        // Call callback
                         onChunk(data);
 
                         if (data.type === 'result') {
@@ -147,7 +162,6 @@ export const api = {
             }
         }
 
-        // Process any remaining buffer provided it's valid JSON
         if (buffer.trim()) {
             try {
                 const data = JSON.parse(buffer);

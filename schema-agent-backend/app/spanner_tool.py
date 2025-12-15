@@ -59,7 +59,7 @@ class SpannerVerificationTool:
         if not self.instance:
             logger.warning("SpannerVerificationTool initialized without a valid Spanner Instance connection.")
 
-    async def verify_ddl(self, ddl: str, background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    async def verify_ddl(self, ddl: str, background_tasks: Optional[BackgroundTasks] = None) -> Dict[str, Any]:
         """
         Verifies the given DDL by attempting to create a temporary database in Spanner.
         Returns a dictionary with 'valid': bool, 'errors': list[str].
@@ -78,8 +78,7 @@ class SpannerVerificationTool:
         
         loop = asyncio.get_running_loop()
         
-        # Schedule cleanup to run after the response is sent
-        background_tasks.add_task(self._drop_db_background, database_id)
+
 
         try:
             # Simple splitting by ';' might be fragile if ';' is in comments or strings.
@@ -107,6 +106,16 @@ class SpannerVerificationTool:
             # Clean generic exception message
             logger.error(f"Unexpected error during verification: {e}")
             return {"valid": False, "errors": [f"Unexpected Error: {str(e)}"]}
+        finally:
+            # Schedule cleanup to run after the response is sent (or immediately in background if no BT)
+            # We do this in finally to ensure we always try to clean up, even if create failed/timed out.
+            if background_tasks:
+                background_tasks.add_task(self._drop_db_background, database_id)
+            else:
+                # Fire-and-forget async task
+                # Crucial: This is now triggered AFTER _create_db_sync has completed (or failed).
+                # So there is no race condition where drop happens before create finishes.
+                asyncio.create_task(self._drop_db_background(database_id))
 
     def _create_db_sync(self, database_id: str, ddl_statements: List[str]):
         """
@@ -124,7 +133,7 @@ class SpannerVerificationTool:
         except Exception as e:
             raise e
 
-    def _drop_db_background(self, database_id: str):
+    async def _drop_db_background(self, database_id: str):
         """
         Background task to drop the temp database.
         """

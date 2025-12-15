@@ -7,8 +7,9 @@
 ## 🚀 Key Features
 
 - **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* your schema.
+- **Auto-Mode Multi-Turn Conversion**: A powerful **self-correction loop** where the agent iteratively validates the schema against a real Spanner instance. If validation fails, it automatically analyzes the error, repairs the schema, and verifies it again until it's perfect.
 - **IDE-like Experience**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
-- **Analyze & Fix Loop**: LLMs work best on feedback (from both humans and compilers!). Validate -> Repair flow allows you to review and accept/reject agent-proposed fixes to iteratively reach to a syntactly correct schema when the model gets it wrong in the first attempt. If validation fails, the agent analyzes the error and proposes specific fixes you can review and accept/reject in a IDE-like, diff-based editor
+- **Analyze & Fix Loop**: LLMs work best on feedback (from both humans and compilers!). Validate -> Repair flow allows you to review and accept/reject agent-proposed fixes.
 - **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
 - **Agent Chat & Schema Refinement**: Ask questions or request schema changes (e.g., "Rename `id` to `user_id`"). The agent proposes changes via a "Review" button, letting you visualize diffs before accepting.
 
@@ -42,7 +43,10 @@ Before the agent sees your schema, a **Context Manager** analyzes the Source DDL
 The agent is prompted to follow a rigid chain-of-thought workflow to break down the source schema before conversion:
 1.  **Analyze**: Parse the source schema and identify constraints.
 2.  **Plan**: Propose Spanner-specific optimizations (Interleaving, Sharding keys).
-3.  **Generate**: Output clean, valid DDL.
+4.  **Auto-Correction Loop ("Auto Mode")**:
+    -   When enabled, the agent enters a **multi-turn loop**.
+    -   It acts as an autonomous engineer: Generate -> Validate -> Analyze Error -> Repair -> Re-validate.
+    -   This feedback loop continues until the schema is **confirmed valid** by the Spanner instance.
 
 #### 3. Human-in-the-loop Validation
 - **Validation**: Users can instantly validate the generated DDL against a real Spanner instance.
