@@ -544,8 +544,8 @@ class SchemaAgentService:
         tools = [types.Tool(function_declarations=[verify_tool_decl])]
 
         # 3. Initial Prompt & History
-        prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
-        prompt += f"\n\nIMPORTANT: You have access to a `verify_ddl_tool`. You MUST use it to verify your DDL. If it returns errors, fix them and verify again. You have {max_retries} attempts. If valid, output the final DDL."
+        from app.prompts import generate_cot_prompt_with_tools
+        prompt = generate_cot_prompt_with_tools(source_ddl, dialect, hints=formatted_hints)
 
         yield {"type": "log", "content": "Initializing Smart Agent with Verification Tool..."}
         

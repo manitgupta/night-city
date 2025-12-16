@@ -1,10 +1,6 @@
 from typing import Optional
 
-def generate_cot_prompt(source_ddl: str, dialect: str, hints: str = "") -> str:
-    """
-    Generates a Chain-of-Thought prompt for SQL conversion.
-    """
-    return f"""
+_BASE_ROLE = """
 You are a Principal Database Engineer at Google Cloud, specialized in migrating legacy SQL schemas (MySQL, PostgreSQL, Oracle) to Google Cloud Spanner.
 Your goal is to produce a Spanner Schema that is:
 1.  **Correct**: Preserves data integrity and types.
@@ -13,23 +9,55 @@ Your goal is to produce a Spanner Schema that is:
 # INSTRUCTIONS
 Before generating the final DDL, you must perform a thorough analysis in your response.
 Follow this rigid step-by-step reasoning process:
+"""
 
+_STEP_1_ANALYZE = """
 ### STEP 1: ANALYZE SOURCE SCHEMA & GRAMMAR
 *   **Parse the Source DDL**: Identify all tables, columns, keys, and constraints.
 *   **Consult the Reference**: Look at the "DOCUMENTATION & SYNTAX REFERENCE" provided below.
 *   **Type Mapping**: Check the "DATA TYPE MAPPING RULES" table. You MUST apply these specific conversions (e.g., `SERIAL` -> `INT64`).
 *   **Grammar Compliance**: deeply understand the Spanner DDL grammar provided in the "DDL SYNTAX REFERENCE". Ensure your generated DDL strictly follows this syntax (e.g., correct placement of `INTERLEAVE IN PARENT`, valid `OPTIONS`).
 *   **Scope Filtering**: Ignore database-level commands such as `CREATE DATABASE`, `USE`, `CREATE SCHEMA`, and character set/collation configurations. Your task is strictly limited to Tables, Indexes, and Constraints.
+"""
 
+_STEP_2_PLAN_BASE = """
 ### STEP 2: PLAN SPANNER SCHEMA
 *   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).
 *   **Primary Keys**: Replace sequential numeric IDs with `BIT_REVERSED_SEQUENCE` (if native support exists) or UUIDs (STRING(36)) to prevent hotspots.
 *   **Data Types**: Map types to Spanner equivalents using the Mapping Rules.
 *   **Indexes**: Suggest secondary indexes for frequently queried columns.
+"""
 
-{hints}
+_STEP_2_WITH_TOOLS = """
+### STEP 2: PLAN SPANNER SCHEMA
+*   **Interleaving**: Propose `INTERLEAVE IN PARENT` for tight 1:Many relationships (e.g., Order -> OrderItems).
+*   **Primary Keys**: Replace sequential numeric IDs with `BIT_REVERSED_SEQUENCE` (if native support exists) or UUIDs (STRING(36)) to prevent hotspots.
+*   **Data Types**: Map types to Spanner equivalents using the Mapping Rules.
+*   **Indexes**: Suggest secondary indexes for frequently queried columns.
+*   **Verification Strategy**: Plan how you will use the `verify_ddl_tool` to validate your DDL.
+"""
 
-### STEP 3: GENERATE CONVERSION REPORT
+_STEP_3_GENERATE_DDL_V1 = """
+### STEP 3: GENERATE SPANNER DDL
+*   Output the final clean DDL inside a ```sql block.
+*   **CRITICAL**: Do NOT include any comments (starting with `--` or `/*`) inside the SQL block. Spanner DDL does not support them and validation will fail.
+*   All explanations must be outside the SQL block.
+"""
+
+_STEP_3_GENERATE_DDL_WITH_TOOLS = """
+### STEP 3: GENERATE AND VERIFY SPANNER DDL
+*   Refine your DDL based on the analysis.
+*   **MANDATORY**: You have access to `verify_ddl_tool`. You MUST use it to verify your DDL is valid.
+*   **DO NOT** output the final DDL immediately.
+*   **DO NOT** assume your DDL is perfect. Capturing complex constraints often requires trial and error.
+*   **ACTION**: Call `verify_ddl_tool(ddl="...")` with your candidate DDL.
+*   **LOOP**:
+    1. If `verify_ddl_tool` returns errors: Analyze the error, Fix the DDL, Call `verify_ddl_tool` again.
+    2. If `verify_ddl_tool` returns "Valid": You are done with the DDL. Proceed to generating the Final Report.
+"""
+
+_STEP_4_REPORT = """
+### STEP 4: GENERATE CONVERSION REPORT
 Create a **Markdown** report summarizing the conversion. This report will be shown to the user.
 Use the following format:
 
@@ -44,11 +72,54 @@ Use the following format:
 ### 🚫 Ignored / Unsupported
 *   List features that were completely ignored (e.g., `Foreign Keys` if not enforced, `Triggers`, `Views` if complex).
 *   Explain why they are not supported in Spanner.
+"""
 
-### STEP 4: GENERATE SPANNER DDL
-*   Output the final clean DDL inside a ```sql block.
-*   **CRITICAL**: Do NOT include any comments (starting with `--` or `/*`) inside the SQL block. Spanner DDL does not support them and validation will fail.
-*   All explanations must be outside the SQL block.
+def generate_cot_prompt(source_ddl: str, dialect: str, hints: str = "") -> str:
+    """
+    Generates a Chain-of-Thought prompt for SQL conversion (V1 Standard).
+    """
+    return f"""
+{_BASE_ROLE}
+
+{_STEP_1_ANALYZE}
+
+{_STEP_2_PLAN_BASE}
+
+{hints}
+
+{_STEP_3_GENERATE_DDL_V1}
+
+{_STEP_4_REPORT}
+
+---
+
+# CURRENT TASK
+**Source Dialect**: {dialect}
+**Source DDL**:
+
+```sql
+{source_ddl}
+```
+
+Begin your response with "### STEP 1: ANALYZE".
+"""
+
+def generate_cot_prompt_with_tools(source_ddl: str, dialect: str, hints: str = "") -> str:
+    """
+    Generates a Chain-of-Thought prompt for SQL conversion with Tool Use (V2).
+    """
+    return f"""
+{_BASE_ROLE}
+
+{_STEP_1_ANALYZE}
+
+{_STEP_2_WITH_TOOLS}
+
+{hints}
+
+{_STEP_3_GENERATE_DDL_WITH_TOOLS}
+
+{_STEP_4_REPORT}
 
 ---
 
