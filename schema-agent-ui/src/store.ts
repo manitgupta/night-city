@@ -4,6 +4,7 @@ export interface Message {
   id: string;
   role: 'user' | 'agent';
   content: string;
+  thoughts?: string; // Chain of thought logs
   isApplying?: boolean; // If agent is suggesting a fix
   isReport?: boolean; // If this message is a conversion report
   isHelpful?: boolean; // If this message is a helpful tip (pulsates)

@@ -180,6 +180,7 @@ function App() {
       id: thinkingMsgId,
       role: 'agent',
       content: "Thinking...",
+      thoughts: "",
       isReport: false
     });
 
@@ -198,7 +199,11 @@ function App() {
             useStore.setState((state: any) => ({
               messages: state.messages.map((m: any) =>
                 m.id === thinkingMsgId
-                  ? { ...m, content: thoughtBuffer || "Thinking..." }
+                  ? {
+                    ...m,
+                    content: m.content === "Thinking..." ? "Generating schema..." : m.content,
+                    thoughts: thoughtBuffer
+                  }
                   : m
               )
             }));
@@ -223,7 +228,7 @@ function App() {
       useStore.setState((state: any) => ({
         messages: state.messages.map((m: any) =>
           m.id === thinkingMsgId
-            ? { ...m, content: messageContent, isReport: !!result.report }
+            ? { ...m, content: messageContent, isReport: !!result.report, thoughts: thoughtBuffer }
             : m
         )
       }));

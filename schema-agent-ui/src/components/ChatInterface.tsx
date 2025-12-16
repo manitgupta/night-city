@@ -1,5 +1,6 @@
+
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, Code2 } from "lucide-react";
+import { Send, Bot, User, Sparkles, Code2, ChevronDown, ChevronRight, BrainCircuit } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStore, Message } from "../store";
 import { api } from "../services/api";
@@ -7,6 +8,109 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+function ThoughtProcess({ thoughts, isComplete }: { thoughts: string, isComplete: boolean }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // If incomplete (streaming), render naturally without collapsible UI
+  if (!isComplete) {
+    if (!thoughts) return null;
+    return (
+      <div className="mb-2 animate-in fade-in duration-300">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: ({ node, ...props }) => (
+              <pre {...props} className="whitespace-pre-wrap break-words overflow-x-hidden max-w-full bg-zinc-800/50 rounded-lg p-2 my-1" />
+            ),
+            code(props) {
+              const { children, className, node, ref, ...rest } = props
+              const match = /language-(\w+)/.exec(className || '')
+              return match ? (
+                <SyntaxHighlighter
+                  {...rest}
+                  PreTag="div"
+                  children={children ? String(children).replace(/\n$/, '') : ''}
+                  language={match[1]}
+                  style={vscDarkPlus}
+                  wrapLongLines={true}
+                  customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                />
+              ) : (
+                <code {...rest} className={className}>
+                  {children}
+                </code>
+              )
+            }
+          }}
+        >
+          {thoughts}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+
+  // If complete, show collapsible UI
+  if (!thoughts) return null;
+
+  return (
+    <div className="mb-3 rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-colors"
+      >
+        <BrainCircuit size={14} className={isExpanded ? "text-indigo-400" : "text-zinc-600"} />
+        <span>Show Thinking</span>
+        <div className="ml-auto">
+          {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </div>
+      </button>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <div className="px-3 pb-3 pt-0 overflow-x-auto text-xs font-mono text-zinc-500 leading-relaxed max-h-[400px] overflow-y-auto custom-scrollbar">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  pre: ({ node, ...props }) => (
+                    <pre {...props} className="whitespace-pre-wrap break-words overflow-x-hidden max-w-full bg-zinc-900 rounded-lg p-2" />
+                  ),
+                  code(props) {
+                    const { children, className, node, ref, ...rest } = props
+                    const match = /language-(\w+)/.exec(className || '')
+                    return match ? (
+                      <SyntaxHighlighter
+                        {...rest}
+                        PreTag="div"
+                        children={children ? String(children).replace(/\n$/, '') : ''}
+                        language={match[1]}
+                        style={vscDarkPlus}
+                        wrapLongLines={true}
+                        customStyle={{ margin: 0, borderRadius: '0.5rem', background: '#18181b', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                      />
+                    ) : (
+                      <code {...rest} className={className}>
+                        {children}
+                      </code>
+                    )
+                  }
+                }}
+              >
+                {thoughts}
+              </ReactMarkdown>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 export function ChatInterface() {
   const { messages, addMessage, isAgentTyping, setAgentTyping, selection, sourceCode, outputCode } = useStore();
@@ -124,6 +228,14 @@ export function ChatInterface() {
                       100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); border: 1px solid rgba(99, 102, 241, 0.1); }
                     }
                   `}</style>
+
+                  {msg.thoughts && (
+                    <ThoughtProcess
+                      thoughts={msg.thoughts}
+                      isComplete={!!msg.isReport}
+                    />
+                  )}
+
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -238,4 +350,5 @@ export function ChatInterface() {
     </div>
   );
 }
+
 
