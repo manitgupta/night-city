@@ -107,7 +107,7 @@ export const api = {
         sourceDialect: string,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
-        return this._streamRequest(`${API_BASE_URL}/multi_turn_convert_schema_stream`, sourceDdl, sourceDialect, onChunk);
+        return this._streamRequest(`${API_BASE_URL}/multi_turn_convert_schema_stream_v2`, sourceDdl, sourceDialect, onChunk);
     },
 
     async _streamRequest(

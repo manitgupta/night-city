@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 from app.prompts import generate_cot_prompt
 from app.context_manager import context_manager
+from app.spanner_tool import SpannerVerificationTool
 
 # ... (Logging config remains same)
 
@@ -498,6 +499,218 @@ class SchemaAgentService:
             "report": current_report + f"\n\n**Auto-Correction**: Max retries reached. Validation may still verify errors.",
             "logs": logs
         }
+
+    async def multi_turn_convert_schema_stream_v2(self, source_ddl: str, dialect: str, max_retries: int = 10):
+        """
+        Smart Multi-turn conversion where the model autonomously uses tools to verify and refine the schema.
+        Manually manages conversation history to ensure correct tool role handling.
+        """
+        logs = []
+        logger.info(f"Starting Smart Multi-Turn Conversion V2 (Max Retries: {max_retries})")
+
+        # 1. Setup Context & Hints
+        ddl_hints = context_manager.get_ddl_hints(source_ddl)
+        feature_hints = context_manager.get_feature_hints(source_ddl)
+        mapping_rules = context_manager.get_mapping_rules(dialect)
+        formatted_hints = context_manager.format_hints_for_prompt(ddl_hints, feature_hints, mapping_rules)
+
+        if formatted_hints:
+            msg = f"Injected {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules."
+            logger.info(msg)
+            logs.append(msg)
+            yield {"type": "log", "content": msg}
+
+        # 2. Define Tool
+        verifier = SpannerVerificationTool()
+
+        async def verify_ddl_tool(ddl: str):
+            result = await verifier.verify_ddl(ddl)
+            return result
+
+        verify_tool_decl = types.FunctionDeclaration(
+            name="verify_ddl_tool",
+            description="Verifies the Spanner DDL by attempting to create it in a temporary Spanner database. Returns valid=True or a list of syntax/spanner errors. Always use this tool to check your generated DDL before finishing.",
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "ddl": types.Schema(
+                        type=types.Type.STRING,
+                        description="The complete Spanner DDL to verify."
+                    )
+                },
+                required=["ddl"]
+            )
+        )
+        tools = [types.Tool(function_declarations=[verify_tool_decl])]
+
+        # 3. Initial Prompt & History
+        prompt = generate_cot_prompt(source_ddl, dialect, hints=formatted_hints)
+        prompt += f"\n\nIMPORTANT: You have access to a `verify_ddl_tool`. You MUST use it to verify your DDL. If it returns errors, fix them and verify again. You have {max_retries} attempts. If valid, output the final DDL."
+
+        yield {"type": "log", "content": "Initializing Smart Agent with Verification Tool..."}
+        
+        # Manual History Management
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)]
+            )
+        ]
+        
+        config = types.GenerateContentConfig(
+            tools=tools,
+            temperature=0.1,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=types.ThinkingConfig(include_thoughts=True),
+            system_instruction="You are an expert Google Cloud Spanner Engineer. Your goal is to convert SQL schemas to perfect Spanner DDL. You are persistent and autonomous. Always verify your work."
+        )
+
+        yield {"type": "log", "content": "Generating initial DDL..."}
+        
+        turn_count = 0
+        final_ddl = ""
+        final_report = ""
+        verified_ddl = None
+
+        try:
+            while turn_count < max_retries:
+                logger.info(f"Turn {turn_count + 1} sending to model...")
+                
+                # Stream response
+                response_stream = await self.client.aio.models.generate_content_stream(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config
+                )
+                
+                # Accumulate the full response for history
+                full_text_buffer = "" # We still track this for final DDL extraction (text only)
+                function_calls = []
+                model_parts = []
+                
+                async for chunk in response_stream:
+                    # Collect RAW parts for history to preserve Thought Signatures
+                    if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                        for part in chunk.candidates[0].content.parts:
+                            model_parts.append(part)
+                            
+                            # Log/Yield Text for UI
+                            if part.text:
+                                # Check if this is a thought
+                                is_thought = hasattr(part, "thought") and part.thought
+                                
+                                # Yield thoughts ONLY if explicitly marked as thought
+                                if is_thought:
+                                     yield {"type": "thought", "content": part.text}
+                                
+                                # Add ALL text to buffer for extraction/history (model doesn't see 'thought' field in history same way?)
+                                # Actually, model *does* see thought if we preserve parts (which we do).
+                                # But we need simple text buffer for local regex parsing of DDL if needed.
+                                if not is_thought:
+                                    full_text_buffer += part.text
+
+                            # Identify function calls for execution
+                            if part.function_call:
+                                function_calls.append(part.function_call)
+                
+                # Construct Model Turn for History
+                if not model_parts:
+                    # Empty response?
+                    yield {"type": "log", "content": "Model returned empty response."}
+                    break
+
+                contents.append(types.Content(role="model", parts=model_parts))
+
+                # Handle Function Calls
+                if function_calls:
+                    turn_count += 1
+                    tool_outputs = []
+                    
+                    for fc in function_calls:
+                        if fc.name == "verify_ddl_tool":
+                            ddl_arg = fc.args.get("ddl", "")
+                            yield {"type": "log", "content": "Agent called Verify Tool. Verifying..."}
+                            
+                            # Execute
+                            verification_result = await verify_ddl_tool(ddl_arg)
+                            
+                            valid = verification_result["valid"]
+                            errors = verification_result["errors"]
+                            
+                            log_msg = "Verification Passed! ✅" if valid else f"Verification Failed with {len(errors)} errors."
+                            yield {"type": "log", "content": log_msg}
+                            
+                            if not valid:
+                                yield {"type": "thought", "content": f"\n\n**Verification Failed:**\n```\n{errors}\n```\nFixing..."}
+                            else:
+                                 # LOCK IN THE VALID DDL
+                                 verified_ddl = ddl_arg
+                                 yield {"type": "thought", "content": f"\n\n**Verification Passed!** Generating final report..."}
+                                 
+                                 # Force the model to stop modifying DDL
+                                 # We modify the result sent back to be very explicit
+                                 verification_result["_instruction"] = "Verification PASSED. The DDL is valid. 1. DO NOT output the DDL again. 2. Output the Conversion Report immediately. 3. STOP."
+
+                            tool_outputs.append(
+                                types.Part(
+                                    function_response=types.FunctionResponse(
+                                        name=fc.name,
+                                        response=verification_result
+                                    )
+                                )
+                            )
+                    
+                    # Append Tool Turn to History with role='tool'
+                    contents.append(types.Content(role="tool", parts=tool_outputs))
+                    
+                    # If we just verified successfully, we might want to ensure the next turn is just the report.
+                    continue # Next iteration sends updated history
+
+                else:
+                    # No function calls, we are done
+                    # If we have a verified DDL, use it. Otherwise try to extract from this final turn.
+                    if verified_ddl:
+                        final_ddl = verified_ddl
+                        # The text here is likely just the report
+                        final_report = self._extract_report(full_text_buffer)
+                    else:
+                        final_ddl = self._extract_sql(full_text_buffer)
+                        final_report = self._extract_report(full_text_buffer)
+                    
+                    break
+            
+            if not final_ddl and turn_count >= max_retries:
+                 yield {"type": "log", "content": f"Max retries ({max_retries}) reached."}
+            
+            # Final Result
+            if final_ddl:
+                if not final_report: 
+                     final_report = "Authentication/Verification complete."
+                
+                yield {
+                    "type": "result",
+                    "converted_ddl": final_ddl,
+                    "logs": logs,
+                    "report": final_report
+                }
+            else:
+                yield {
+                    "type": "result",
+                    "converted_ddl": "",
+                    "logs": logs,
+                    "report": "Failed to generate DDL or Max Retries reached without success."
+                }
+
+        except Exception as e:
+            logger.error(f"Error in multi_turn_v2: {e}", exc_info=True)
+            yield {"type": "log", "content": f"Error: {str(e)}"}
+            yield {
+                "type": "result",
+                "converted_ddl": "", 
+                "logs": logs,
+                "report": f"Process failed: {str(e)}"
+            }
+
 
     async def analyze_fix_stream(self, source_ddl: str, generated_ddl: str, error_message: str):
         """

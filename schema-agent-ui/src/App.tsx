@@ -191,21 +191,10 @@ function App() {
       // We can just call conditionally.
 
       const streamCallback = (chunk: any) => {
-        if (chunk.type === 'thought') {
+        if (chunk.type === 'thought' || chunk.type === 'log') {
           if (chunk.content) {
-            thoughtBuffer += chunk.content;
-            // Update logic...
-            useStore.setState((state: any) => ({
-              messages: state.messages.map((m: any) =>
-                m.id === thinkingMsgId
-                  ? { ...m, content: thoughtBuffer || "Thinking..." }
-                  : m
-              )
-            }));
-          }
-        } else if (chunk.type === 'log') {
-          if (chunk.content) {
-            thoughtBuffer += `\n> ${chunk.content}\n`;
+            thoughtBuffer += chunk.type === 'log' ? `\n> ${chunk.content}\n` : chunk.content;
+
             useStore.setState((state: any) => ({
               messages: state.messages.map((m: any) =>
                 m.id === thinkingMsgId

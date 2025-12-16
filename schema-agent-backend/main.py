@@ -124,6 +124,23 @@ async def multi_turn_convert_schema_stream(request: ConversionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/multi_turn_convert_schema_stream_v2")
+async def multi_turn_convert_schema_stream_v2(request: ConversionRequest):
+    try:
+        from fastapi.responses import StreamingResponse
+        import json
+
+        async def generate():
+            async for chunk in agent_service.multi_turn_convert_schema_stream_v2(
+                request.source_ddl, 
+                request.source_dialect
+            ):
+                yield json.dumps(chunk) + "\n"
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 from pydantic import BaseModel
 
 class ValidateRequest(BaseModel):
