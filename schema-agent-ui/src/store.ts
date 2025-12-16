@@ -51,7 +51,7 @@ export const useStore = create<AppState>((set) => ({
     {
       id: '1',
       role: 'agent',
-      content: "Hello! I'm your Schema Agent. Highlight any code to ask specific questions, or just ask me to convert the whole schema."
+      content: "Hello! Welcome to Night City. I am your schema conversion AI assistant! I can help you understand the converted schema, and even help you make changes! (ask to rename a column or add a new column, etc.)"
     }
   ],
   isAgentTyping: false,
