@@ -11,7 +11,7 @@ from toolbox_core import ToolboxClient
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from app.prompts import generate_cot_prompt
+from app.prompts import generate_cot_prompt, generate_analysis_prompt_v2, generate_conversion_prompt_v2
 from app.context_manager import context_manager
 from app.spanner_tool import SpannerVerificationTool
 
@@ -502,214 +502,253 @@ class SchemaAgentService:
 
     async def multi_turn_convert_schema_stream_v2(self, source_ddl: str, dialect: str, max_retries: int = 10):
         """
-        Smart Multi-turn conversion where the model autonomously uses tools to verify and refine the schema.
-        Manually manages conversation history to ensure correct tool role handling.
+        Multi-turn conversion with 2-Agent Architecture:
+        1. Agent 1 (Analysis): Analyzes schema, finds features, uses Search Grounding, plans conversion (JSON).
+        2. Agent 2 (Conversion): Takes Analysis JSON, generates DDL, verifies with Spanner Tool.
         """
         logs = []
-        logger.info(f"Starting Smart Multi-Turn Conversion V2 (Max Retries: {max_retries})")
+        logger.info(f"Starting Multi-Agent Conversion (Analysis -> Conversion)")
 
-        # 1. Setup Context & Hints
+        # --- PHASE 1: ANALYSIS & PLANNING ---
+        yield {"type": "log", "content": "--- PHASE 1: ANALYSIS & PLANNING ---"}
+        yield {"type": "log", "content": "Initializing Analysis Agent..."}
+        
+        # hints
         ddl_hints = context_manager.get_ddl_hints(source_ddl)
         feature_hints = context_manager.get_feature_hints(source_ddl)
         mapping_rules = context_manager.get_mapping_rules(dialect)
         formatted_hints = context_manager.format_hints_for_prompt(ddl_hints, feature_hints, mapping_rules)
 
         if formatted_hints:
-            msg = f"Injected {len(ddl_hints)} DDL hints, {len(feature_hints)} Feature hints, {len(mapping_rules)} Mapping rules."
-            logger.info(msg)
-            logs.append(msg)
-            yield {"type": "log", "content": msg}
+            yield {"type": "log", "content": f"Injected {len(ddl_hints)} DDL hints, {len(mapping_rules)} Mapping rules."}
 
-        # 2. Define Tool
+        analysis_prompt = generate_analysis_prompt_v2(source_ddl, dialect, hints=formatted_hints)
+        
+        yield {"type": "log", "content": "Analyzing schema features and planning conversion strategy..."}
+        
+        analysis_json = ""
+        analysis_full_text = ""
+        
+        # Tools for Analysis Agent: Google Search
+        analysis_tools = []
+        try:
+             # Attempt to enable Google Search if available in SDK
+             if hasattr(types, "GoogleSearch"):
+                 analysis_tools.append(types.Tool(google_search=types.GoogleSearch()))
+                 yield {"type": "log", "content": "Enabled Google Search Grounding for Analysis Agent."}
+        except Exception:
+             logger.warning("Google Search tool not available or configuration failed.")
+
+        try:
+            # We enforce JSON output for Analysis, but we also want CoT if possible.
+            # Note: JSON mode + Thinking often works by thinking first, then outputting JSON.
+            config_analysis = types.GenerateContentConfig(
+                tools=analysis_tools,
+                response_mime_type="application/json",
+                temperature=0.1,
+                thinking_config=types.ThinkingConfig(include_thoughts=True) if hasattr(types, "ThinkingConfig") else None,
+                system_instruction="You are a Principal Database Analyst. Breakdown schemas and plan migrations. Output valid JSON."
+            )
+
+            # Stream Analysis
+            logger.info("Sending Analysis prompt...")
+            
+            # Ensure server.log handler exists
+            has_file_handler = any(isinstance(h, logging.FileHandler) and 'server.log' in h.baseFilename for h in logger.handlers)
+            if not has_file_handler:
+                file_handler = logging.FileHandler("server.log")
+                file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+                logger.addHandler(file_handler)
+
+            response_stream = await self.client.aio.models.generate_content_stream(
+                model=self.model_name,
+                contents=analysis_prompt,
+                config=config_analysis
+            )
+
+            # Collect all chunks for deep logging
+            collected_chunks = []
+
+            async for chunk in response_stream:
+                 # Store chunk for logging
+                 collected_chunks.append(chunk)
+
+                 if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                     for part in chunk.candidates[0].content.parts:
+                         if part.text:
+                             # Check if this is a thought
+                             is_thought = hasattr(part, "thought") and part.thought
+                             if is_thought:
+                                 yield {"type": "thought", "content": part.text}
+                             
+                             if not is_thought:
+                                 analysis_full_text += part.text
+            
+            # Show the Analysis Result in UI as a special log or thought
+            yield {"type": "thought", "content": f"\n\n**Analysis Complete**\n```json\n{analysis_full_text}\n```\n"}
+            analysis_json = analysis_full_text
+
+            # DEEP LOGGING
+            logger.info("="*50)
+            logger.info("ANALYSIS AGENT - DEEP LOG")
+            logger.info("="*50)
+            logger.info(f"FINAL JSON OUTPUT:\n{analysis_json}")
+            
+            # Log Grounding Metadata
+            grounding_info = []
+            for i, c in enumerate(collected_chunks):
+                if c.candidates:
+                    for cand in c.candidates:
+                        if cand.grounding_metadata:
+                            grounding_info.append(f"Chunk {i} Metadata: {cand.grounding_metadata}")
+            
+            if grounding_info:
+                logger.info("GROUNDING METADATA FOUND:")
+                for g in grounding_info:
+                    logger.info(g)
+            else:
+                logger.info("NO GROUNDING METADATA FOUND IN CHUNKS.")
+            
+            # Log Full Chunks (Preview)
+            logger.info("FULL CHUNK DUMP (First 3 and Last 3):")
+            if len(collected_chunks) > 6:
+                for c in collected_chunks[:3]: logger.info(str(c))
+                logger.info("...")
+                for c in collected_chunks[-3:]: logger.info(str(c))
+            else:
+                for c in collected_chunks: logger.info(str(c))
+            logger.info("="*50)
+
+
+        except Exception as e:
+            logger.error(f"Analysis Agent Failed: {e}", exc_info=True)
+            yield {"type": "log", "content": f"Analysis Agent Failed: {str(e)}. Falling back to direct conversion..."}
+            # Fallback: Empty analysis will force Agent 2 to rely on its own knowledge or Base Prompt if we adjust it.
+            # But the prompt expects JSON. We can synthesize a dummy JSON.
+            analysis_json = '{"analysis": {"features_identified": [], "error": "Analysis failed"}, "plan": {"tables": [], "verification_strategy": "Direct conversion"}}'
+
+        # --- PHASE 2: CONVERSION & VERIFICATION ---
+        yield {"type": "log", "content": "--- PHASE 2: CONVERSION & VERIFICATION ---"}
+        yield {"type": "log", "content": "Initializing Conversion Agent..."}
+        
+        # Define Verification Tool
         verifier = SpannerVerificationTool()
-
         async def verify_ddl_tool(ddl: str):
             result = await verifier.verify_ddl(ddl)
             return result
 
         verify_tool_decl = types.FunctionDeclaration(
             name="verify_ddl_tool",
-            description="Verifies the Spanner DDL by attempting to create it in a temporary Spanner database. Returns valid=True or a list of syntax/spanner errors. Always use this tool to check your generated DDL before finishing.",
+            description="Verifies Spanner DDL. Returns valid=True or errors.",
             parameters=types.Schema(
                 type=types.Type.OBJECT,
-                properties={
-                    "ddl": types.Schema(
-                        type=types.Type.STRING,
-                        description="The complete Spanner DDL to verify."
-                    )
-                },
+                properties={"ddl": types.Schema(type=types.Type.STRING)},
                 required=["ddl"]
             )
         )
-        tools = [types.Tool(function_declarations=[verify_tool_decl])]
+        conversion_tools = [types.Tool(function_declarations=[verify_tool_decl])]
 
-        # 3. Initial Prompt & History
-        from app.prompts import generate_cot_prompt_with_tools
-        prompt = generate_cot_prompt_with_tools(source_ddl, dialect, hints=formatted_hints)
-
-        yield {"type": "log", "content": "Initializing Smart Agent with Verification Tool..."}
+        conversion_prompt = generate_conversion_prompt_v2(source_ddl, dialect, analysis_json)
         
-        # Manual History Management
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part(text=prompt)]
-            )
+        # Manual History Management for Agent 2
+        history_contents = [
+            types.Content(role="user", parts=[types.Part(text=conversion_prompt)])
         ]
         
-        config = types.GenerateContentConfig(
-            tools=tools,
+        config_conversion = types.GenerateContentConfig(
+            tools=conversion_tools,
             temperature=0.1,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            thinking_config=types.ThinkingConfig(include_thoughts=True),
-            system_instruction="You are an expert Google Cloud Spanner Engineer. Your goal is to convert SQL schemas to perfect Spanner DDL. You are persistent and autonomous. Always verify your work."
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True), # We handle it manually
+            thinking_config=types.ThinkingConfig(include_thoughts=True) if hasattr(types, "ThinkingConfig") else None,
+            system_instruction="You are a Senior Spanner Engineer. Convert SQL schemas to Spanner DDL using the provided Analysis Plan. Always VERIFY your DDL."
         )
 
-        yield {"type": "log", "content": "Generating initial DDL..."}
+        yield {"type": "log", "content": "Generating DDL based on Analysis Plan..."}
         
         turn_count = 0
         final_ddl = ""
         final_report = ""
         verified_ddl = None
-
+        
         try:
-            while turn_count < max_retries:
-                logger.info(f"Turn {turn_count + 1} sending to model...")
+             while turn_count < max_retries:
+                logger.info(f"Conversion Turn {turn_count + 1}...")
                 
-                # Stream response
                 response_stream = await self.client.aio.models.generate_content_stream(
                     model=self.model_name,
-                    contents=contents,
-                    config=config
+                    contents=history_contents,
+                    config=config_conversion
                 )
                 
-                # Accumulate the full response for history
-                full_text_buffer = "" # We still track this for final DDL extraction (text only)
+                full_text_buffer = ""
                 function_calls = []
                 model_parts = []
                 
                 async for chunk in response_stream:
-                    # Collect RAW parts for history to preserve Thought Signatures
                     if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
                         for part in chunk.candidates[0].content.parts:
                             model_parts.append(part)
-                            
-                            # Log/Yield Text for UI
                             if part.text:
-                                # Check if this is a thought
                                 is_thought = hasattr(part, "thought") and part.thought
-                                
-                                # Yield thoughts ONLY if explicitly marked as thought
                                 if is_thought:
                                      yield {"type": "thought", "content": part.text}
-                                
-                                # Add ALL text to buffer for extraction/history (model doesn't see 'thought' field in history same way?)
-                                # Actually, model *does* see thought if we preserve parts (which we do).
-                                # But we need simple text buffer for local regex parsing of DDL if needed.
                                 if not is_thought:
                                     full_text_buffer += part.text
-
-                            # Identify function calls for execution
                             if part.function_call:
                                 function_calls.append(part.function_call)
                 
-                # Construct Model Turn for History
                 if not model_parts:
-                    # Empty response?
-                    yield {"type": "log", "content": "Model returned empty response."}
+                    yield {"type": "log", "content": "Agent 2 returned empty response."}
                     break
-
-                contents.append(types.Content(role="model", parts=model_parts))
-
-                # Handle Function Calls
+                
+                history_contents.append(types.Content(role="model", parts=model_parts))
+                
                 if function_calls:
                     turn_count += 1
                     tool_outputs = []
-                    
                     for fc in function_calls:
                         if fc.name == "verify_ddl_tool":
                             ddl_arg = fc.args.get("ddl", "")
-                            yield {"type": "log", "content": "Agent called Verify Tool. Verifying..."}
+                            yield {"type": "log", "content": "Verifying Candidate DDL..."}
                             
-                            # Execute
-                            verification_result = await verify_ddl_tool(ddl_arg)
+                            res = await verify_ddl_tool(ddl_arg)
+                            valid, errors = res["valid"], res["errors"]
                             
-                            valid = verification_result["valid"]
-                            errors = verification_result["errors"]
-                            
-                            log_msg = "Verification Passed! ✅" if valid else f"Verification Failed with {len(errors)} errors."
-                            yield {"type": "log", "content": log_msg}
-                            
-                            if not valid:
-                                yield {"type": "thought", "content": f"\n\n**Verification Failed:**\n```\n{errors}\n```\nFixing..."}
+                            if valid:
+                                verified_ddl = ddl_arg
+                                yield {"type": "log", "content": "Verification Passed! ✅"}
+                                res["_instruction"] = "Verification PASSED. STOP and output Final Report."
                             else:
-                                 # LOCK IN THE VALID DDL
-                                 verified_ddl = ddl_arg
-                                 yield {"type": "thought", "content": f"\n\n**Verification Passed!** Generating final report..."}
-                                 
-                                 # Force the model to stop modifying DDL
-                                 # We modify the result sent back to be very explicit
-                                 verification_result["_instruction"] = "Verification PASSED. The DDL is valid. 1. DO NOT output the DDL again. 2. Output the Conversion Report immediately. 3. STOP."
-
+                                 yield {"type": "log", "content": f"Verification Failed ({len(errors)} errors). Repairing..."}
+                                 yield {"type": "thought", "content": f"\n\n**Errors:**\n```\n{errors}\n```\n"}
+                            
                             tool_outputs.append(
-                                types.Part(
-                                    function_response=types.FunctionResponse(
-                                        name=fc.name,
-                                        response=verification_result
-                                    )
-                                )
+                                types.Part(function_response=types.FunctionResponse(name=fc.name, response=res))
                             )
                     
-                    # Append Tool Turn to History with role='tool'
-                    contents.append(types.Content(role="tool", parts=tool_outputs))
-                    
-                    # If we just verified successfully, we might want to ensure the next turn is just the report.
-                    continue # Next iteration sends updated history
-
+                    history_contents.append(types.Content(role="tool", parts=tool_outputs))
+                    continue
                 else:
-                    # No function calls, we are done
-                    # If we have a verified DDL, use it. Otherwise try to extract from this final turn.
+                    # No function calls, assumed done
                     if verified_ddl:
                         final_ddl = verified_ddl
-                        # The text here is likely just the report
                         final_report = self._extract_report(full_text_buffer)
                     else:
+                        # Fallback if it didn't verify but finished
                         final_ddl = self._extract_sql(full_text_buffer)
                         final_report = self._extract_report(full_text_buffer)
-                    
                     break
             
-            if not final_ddl and turn_count >= max_retries:
-                 yield {"type": "log", "content": f"Max retries ({max_retries}) reached."}
-            
-            # Final Result
-            if final_ddl:
-                if not final_report: 
-                     final_report = "Authentication/Verification complete."
-                
-                yield {
-                    "type": "result",
-                    "converted_ddl": final_ddl,
-                    "logs": logs,
-                    "report": final_report
-                }
-            else:
-                yield {
-                    "type": "result",
-                    "converted_ddl": "",
-                    "logs": logs,
-                    "report": "Failed to generate DDL or Max Retries reached without success."
-                }
+             if final_ddl:
+                if not final_report: final_report = "Conversion verified and completed."
+                yield {"type": "result", "converted_ddl": final_ddl, "logs": logs, "report": final_report}
+             else:
+                yield {"type": "result", "converted_ddl": "", "logs": logs, "report": "Conversion failed or timed out."}
 
         except Exception as e:
-            logger.error(f"Error in multi_turn_v2: {e}", exc_info=True)
-            yield {"type": "log", "content": f"Error: {str(e)}"}
-            yield {
-                "type": "result",
-                "converted_ddl": "", 
-                "logs": logs,
-                "report": f"Process failed: {str(e)}"
-            }
+            logger.error(f"Conversion Agent Failed: {e}", exc_info=True)
+            yield {"type": "result", "converted_ddl": "", "logs": logs, "report": f"Error: {e}"}
+
 
 
     async def analyze_fix_stream(self, source_ddl: str, generated_ddl: str, error_message: str):

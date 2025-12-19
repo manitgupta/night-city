@@ -166,3 +166,104 @@ INSTRUCTION:
 
 CRITICAL: Return ONLY JSON. No markdown formatting around the JSON.
 """
+
+
+def generate_analysis_prompt_v2(source_ddl: str, dialect: str, hints: str = "") -> str:
+    """
+    Generates a prompt for Agent 1: Analysis & Planning.
+    Output MUST be JSON.
+    """
+    return f"""
+{_BASE_ROLE}
+
+### AGENT 1: ANALYSIS & PLANNING
+Your task is to analyze the source schema and plan the Spanner conversion.
+**You must NOT generate the final DDL.** Your output will be consumed by the "Conversion Agent" and the User Interface.
+
+### STEP 1: ANALYZE SOURCE SCHEMA
+*   **Parse Source DDL**: Identify all tables, columns, constraints (PKs, FKs, Checks), and sequences.
+*   **Identify Features**: List specific SQL features used (e.g., `SERIAL`, `TEXT`, `JSONB`, `STORED PROCEDURES`).
+*   **Search Grounding (MANDATORY)**: You MUST use the `google_search` tool to look up the official Spanner DDL syntax for the identified features.
+    *   *Requirement*: Perform at least one search query to verify the latest syntax.
+    *   *Function Verification*: If the source DDL uses specific SQL functions (e.g., `NOW()`, `uuid_generate_v4()`, `jsonb_build_object()`) or if you plan to use Spanner functions (e.g., `CURRENT_TIMESTAMP()`, `GENERATE_UUID()`), you MUST search to verify:
+        1. That the Spanner function actually exists.
+        2. Its correct syntax/signature.
+    *   *Search Examples*: 
+        - "Spanner replacement for PostgreSQL SERIAL bit reversed sequence"
+        - "Spanner INTERLEAVE IN PARENT syntax"
+        - "Spanner equivalent for PostgreSQL NOW()"
+        - "Does Google Cloud Spanner have GENERATE_UUID function?"
+
+### STEP 2: PLAN CONVERSION
+*   **Mapping Strategy**: Define how each identified complex feature will be mapped to Spanner.
+*   **Optimizations**: specific Spanner optimizations (e.g., `INTERLEAVE IN PARENT`, `BIT_REVERSED_SEQUENCE`).
+
+### STEP 3: OUTPUT FORMAT (JSON ONLY)
+Return a valid JSON object with this exact structure:
+{{
+  "analysis": {{
+    "source_dialect": "{dialect}",
+    "features_identified": ["list", "of", "features"],
+    "primary_key_strategy": "description of strategy",
+    "search_findings": "Summary of what you found via search (optional)",
+    "recommendations": ["list", "of", "recommendations"]
+  }},
+  "plan": {{
+    "tables": [
+      {{
+        "name": "table_name",
+        "interleaving": "PARENT_TABLE (if applicable) or null",
+        "notes": "specific notes for this table"
+      }}
+    ],
+    "verification_strategy": "How to verify validity"
+  }}
+}}
+
+{hints}
+
+---
+
+# CURRENT TASK
+**Source Dialect**: {dialect}
+**Source DDL**:
+```sql
+{source_ddl}
+```
+
+**CRITICAL**: Output composed of JSON ONLY. Do NOT wrap in markdown code blocks.
+"""
+
+def generate_conversion_prompt_v2(source_ddl: str, dialect: str, analysis_json: str) -> str:
+    """
+    Generates a prompt for Agent 2: Conversion & Verification.
+    """
+    return f"""
+{_BASE_ROLE}
+
+### AGENT 2: CONVERSION & VERIFICATION
+You are the Execution Agent. You receive an "Analysis Plan" from the Lead Analyst and the "Source DDL".
+Your goal is to generate the VALID Spanner DDL and verify it.
+
+### INPUT DATA
+**Source Dialect**: {dialect}
+**Analysis & Plan**:
+```json
+{analysis_json}
+```
+**Source DDL**:
+```sql
+{source_ddl}
+```
+
+### INSTRUCTIONS
+1.  **Review Plan**: Follow the strategies outlined in the Analysis JSON.
+2.  **Generate DDL**: Write the full Spanner DDL.
+3.  **Verify**: You MUST use the `verify_ddl_tool` to check your DDL.
+4.  **Iterate**: If verification fails, fix the DDL and verify again.
+5.  **Final Output**: Once verified, output the final DDL in a ```sql block.
+
+{_STEP_3_GENERATE_DDL_WITH_TOOLS}
+
+{_STEP_4_REPORT}
+"""
