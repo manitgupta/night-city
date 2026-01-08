@@ -5,3 +5,4 @@ toolbox-core==0.5.4
 google-adk==1.20.0
 python-dotenv==1.2.1
 google-cloud-spanner==3.60.0
+anthropic[vertex]>=0.45.0

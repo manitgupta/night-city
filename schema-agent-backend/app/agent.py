@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from google.adk import Agent
 from google.genai import types
 from google import genai
+from anthropic import AsyncAnthropicVertex
 from toolbox_core import ToolboxClient
 
 
@@ -35,6 +36,25 @@ class SchemaAgentService:
         if not api_key:
             logger.error("GEMINI_API_KEY not found in environment variables during AgentService init.")
         self.client = genai.Client(api_key=api_key)
+        
+        # Initialize Anthropic Vertex Client
+        self.claude_model = os.getenv("CLAUDE_MODEL", "claude-opus-4-5@20251101")
+        vertex_project = os.getenv("VERTEX_PROJECT_ID", os.getenv("SPANNER_PROJECT_ID"))
+        vertex_region = os.getenv("VERTEX_REGION", "us-central1")
+        
+        self.anthropic_client = None
+        if vertex_project:
+            try:
+                self.anthropic_client = AsyncAnthropicVertex(
+                    project_id=vertex_project,
+                    region=vertex_region
+                )
+                logger.info(f"Anthropic Vertex Client initialized for project {vertex_project} in {vertex_region}")
+            except Exception as e:
+                logger.error(f"Failed to initialize Anthropic Vertex Client: {e}")
+        else:
+            logger.warning("VERTEX_PROJECT_ID or SPANNER_PROJECT_ID not set. Anthropic client not initialized.")
+
         self.active_chats: Dict[str, Any] = {}
 
     @classmethod
@@ -502,11 +522,14 @@ class SchemaAgentService:
 
     async def multi_turn_convert_schema_stream_v2(self, source_ddl: str, dialect: str, max_retries: int = 10):
         """
-        Smart Multi-turn conversion where the model autonomously uses tools to verify and refine the schema.
-        Manually manages conversation history to ensure correct tool role handling.
+        Smart Multi-turn conversion using Claude Opus on Vertex AI.
         """
+        if not self.anthropic_client:
+            yield {"type": "log", "content": "CRITICAL ERROR: Anthropic Client not initialized. Check environment variables."}
+            return
+
         logs = []
-        logger.info(f"Starting Smart Multi-Turn Conversion V2 (Max Retries: {max_retries})")
+        logger.info(f"Starting Smart Multi-Turn Conversion V2 with Claude (Max Retries: {max_retries})")
 
         # 1. Setup Context & Hints
         ddl_hints = context_manager.get_ddl_hints(source_ddl)
@@ -520,120 +543,125 @@ class SchemaAgentService:
             logs.append(msg)
             yield {"type": "log", "content": msg}
 
-        # 2. Define Tool
+        # 2. Define Tools
         verifier = SpannerVerificationTool()
-
-        async def verify_ddl_tool(ddl: str):
-            result = await verifier.verify_ddl(ddl)
-            return result
-
-        verify_tool_decl = types.FunctionDeclaration(
-            name="verify_ddl_tool",
-            description="Verifies the Spanner DDL by attempting to create it in a temporary Spanner database. Returns valid=True or a list of syntax/spanner errors. Always use this tool to check your generated DDL before finishing.",
-            parameters=types.Schema(
-                type=types.Type.OBJECT,
-                properties={
-                    "ddl": types.Schema(
-                        type=types.Type.STRING,
-                        description="The complete Spanner DDL to verify."
-                    )
-                },
-                required=["ddl"]
-            )
-        )
-        tools = [types.Tool(function_declarations=[verify_tool_decl])]
+        
+        tools = [
+            {
+                "name": "verify_ddl_tool",
+                "description": "Verifies the Spanner DDL by attempting to create it in a temporary Spanner database. Returns valid=True or a list of syntax/spanner errors. Always use this tool to check your generated DDL before finishing.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "ddl": {
+                            "type": "string",
+                            "description": "The complete Spanner DDL to verify."
+                        }
+                    },
+                    "required": ["ddl"]
+                }
+            }
+        ]
 
         # 3. Initial Prompt & History
         from app.prompts import generate_cot_prompt_with_tools
         prompt = generate_cot_prompt_with_tools(source_ddl, dialect, hints=formatted_hints)
 
-        yield {"type": "log", "content": "Initializing Smart Agent with Verification Tool..."}
+        yield {"type": "log", "content": "Initializing Claude Opus Agent..."}
         
-        # Manual History Management
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part(text=prompt)]
-            )
-        ]
-        
-        config = types.GenerateContentConfig(
-            tools=tools,
-            temperature=0.1,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-            thinking_config=types.ThinkingConfig(include_thoughts=True),
-            system_instruction="You are an expert Google Cloud Spanner Engineer. Your goal is to convert SQL schemas to perfect Spanner DDL. You are persistent and autonomous. Always verify your work."
-        )
+        system_instruction = "You are an expert Google Cloud Spanner Engineer. Your goal is to convert SQL schemas to perfect Spanner DDL. You are persistent and autonomous. Always verify your work."
 
-        yield {"type": "log", "content": "Generating initial DDL..."}
-        
+        messages = [
+            {"role": "user", "content": prompt}
+        ]
+
+        # Config
         turn_count = 0
         final_ddl = ""
         final_report = ""
         verified_ddl = None
 
+        yield {"type": "log", "content": "Generating initial DDL..."}
+
         try:
             while turn_count < max_retries:
-                logger.info(f"Turn {turn_count + 1} sending to model...")
+                logger.info(f"Turn {turn_count + 1} sending to Claude...")
                 
-                # Stream response
-                response_stream = await self.client.aio.models.generate_content_stream(
-                    model=self.model_name,
-                    contents=contents,
-                    config=config
+                message_stream = await self.anthropic_client.messages.create(
+                    model=self.claude_model,
+                    max_tokens=4096,
+                    messages=messages,
+                    system=system_instruction,
+                    tools=tools,
+                    stream=True,
+                    temperature=0.1
                 )
                 
-                # Accumulate the full response for history
-                full_text_buffer = "" # We still track this for final DDL extraction (text only)
-                function_calls = []
-                model_parts = []
+                # Stream processing
+                current_text_buffer = ""
+                current_tool_calls = []
+                current_tool_id = None
+                current_tool_name = None
+                current_tool_input_json = ""
                 
-                async for chunk in response_stream:
-                    # Collect RAW parts for history to preserve Thought Signatures
-                    if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
-                        for part in chunk.candidates[0].content.parts:
-                            model_parts.append(part)
+                async for event in message_stream:
+                    if event.type == "content_block_start":
+                        if event.content_block.type == "tool_use":
+                            current_tool_id = event.content_block.id
+                            current_tool_name = event.content_block.name
+                            current_tool_input_json = ""
+                    elif event.type == "content_block_delta":
+                        if event.delta.type == "text_delta":
+                            text_chunk = event.delta.text
+                            current_text_buffer += text_chunk
+                            yield {"type": "thought", "content": text_chunk}
+                        elif event.delta.type == "input_json_delta":
+                            current_tool_input_json += event.delta.partial_json
+                    elif event.type == "content_block_stop":
+                        if current_tool_id:
+                            # Tool use block finished
+                            import json
+                            try:
+                                args = json.loads(current_tool_input_json)
+                                current_tool_calls.append({
+                                    "id": current_tool_id,
+                                    "name": current_tool_name,
+                                    "input": args
+                                })
+                            except Exception as e:
+                                logger.error(f"Failed to parse tool input JSON: {e}")
                             
-                            # Log/Yield Text for UI
-                            if part.text:
-                                # Check if this is a thought
-                                is_thought = hasattr(part, "thought") and part.thought
-                                
-                                # Yield thoughts ONLY if explicitly marked as thought
-                                if is_thought:
-                                     yield {"type": "thought", "content": part.text}
-                                
-                                # Add ALL text to buffer for extraction/history (model doesn't see 'thought' field in history same way?)
-                                # Actually, model *does* see thought if we preserve parts (which we do).
-                                # But we need simple text buffer for local regex parsing of DDL if needed.
-                                if not is_thought:
-                                    full_text_buffer += part.text
-
-                            # Identify function calls for execution
-                            if part.function_call:
-                                function_calls.append(part.function_call)
+                            current_tool_id = None
+                            current_tool_name = None
+                            current_tool_input_json = ""
                 
-                # Construct Model Turn for History
-                if not model_parts:
-                    # Empty response?
-                    yield {"type": "log", "content": "Model returned empty response."}
-                    break
-
-                contents.append(types.Content(role="model", parts=model_parts))
-
-                # Handle Function Calls
-                if function_calls:
+                # End of Turn
+                # Append assistant response to history
+                assistant_content = []
+                if current_text_buffer:
+                    assistant_content.append({"type": "text", "text": current_text_buffer})
+                
+                for tc in current_tool_calls:
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": tc["id"],
+                        "name": tc["name"],
+                        "input": tc["input"]
+                    })
+                
+                messages.append({"role": "assistant", "content": assistant_content})
+                
+                # Handle Tool Calls
+                if current_tool_calls:
                     turn_count += 1
-                    tool_outputs = []
+                    tool_results_content = []
                     
-                    for fc in function_calls:
-                        if fc.name == "verify_ddl_tool":
-                            ddl_arg = fc.args.get("ddl", "")
-                            yield {"type": "log", "content": "Agent called Verify Tool. Verifying..."}
+                    for tc in current_tool_calls:
+                        if tc["name"] == "verify_ddl_tool":
+                            ddl_arg = tc["input"].get("ddl", "")
+                            yield {"type": "log", "content": "Claude called Verify Tool. Verifying..."}
                             
-                            # Execute
-                            verification_result = await verify_ddl_tool(ddl_arg)
-                            
+                            verification_result = await verifier.verify_ddl(ddl_arg)
                             valid = verification_result["valid"]
                             errors = verification_result["errors"]
                             
@@ -643,46 +671,32 @@ class SchemaAgentService:
                             if not valid:
                                 yield {"type": "thought", "content": f"\n\n**Verification Failed:**\n```\n{errors}\n```\nFixing..."}
                             else:
-                                 # LOCK IN THE VALID DDL
-                                 verified_ddl = ddl_arg
-                                 yield {"type": "thought", "content": f"\n\n**Verification Passed!** Generating final report..."}
-                                 
-                                 # Force the model to stop modifying DDL
-                                 # We modify the result sent back to be very explicit
-                                 verification_result["_instruction"] = "Verification PASSED. The DDL is valid. 1. DO NOT output the DDL again. 2. Output the Conversion Report immediately. 3. STOP."
+                                verified_ddl = ddl_arg
+                                yield {"type": "thought", "content": f"\n\n**Verification Passed!** Generating final report..."}
+                                verification_result["_instruction"] = "Verification PASSED. The DDL is valid. 1. DO NOT output the DDL again. 2. Output the Conversion Report immediately. 3. STOP."
 
-                            tool_outputs.append(
-                                types.Part(
-                                    function_response=types.FunctionResponse(
-                                        name=fc.name,
-                                        response=verification_result
-                                    )
-                                )
-                            )
+                            tool_results_content.append({
+                                "type": "tool_result",
+                                "tool_use_id": tc["id"],
+                                "content": str(verification_result) # Anthropic expects string or list of blocks usually used string for data
+                            })
                     
-                    # Append Tool Turn to History with role='tool'
-                    contents.append(types.Content(role="tool", parts=tool_outputs))
-                    
-                    # If we just verified successfully, we might want to ensure the next turn is just the report.
-                    continue # Next iteration sends updated history
-
+                    messages.append({"role": "user", "content": tool_results_content})
+                    continue # Next turn
+                
                 else:
-                    # No function calls, we are done
-                    # If we have a verified DDL, use it. Otherwise try to extract from this final turn.
+                    # No tool calls -> Done
                     if verified_ddl:
                         final_ddl = verified_ddl
-                        # The text here is likely just the report
-                        final_report = self._extract_report(full_text_buffer)
+                        final_report = self._extract_report(current_text_buffer)
                     else:
-                        final_ddl = self._extract_sql(full_text_buffer)
-                        final_report = self._extract_report(full_text_buffer)
-                    
+                        final_ddl = self._extract_sql(current_text_buffer)
+                        final_report = self._extract_report(current_text_buffer)
                     break
             
             if not final_ddl and turn_count >= max_retries:
                  yield {"type": "log", "content": f"Max retries ({max_retries}) reached."}
             
-            # Final Result
             if final_ddl:
                 if not final_report: 
                      final_report = "Authentication/Verification complete."
@@ -694,7 +708,7 @@ class SchemaAgentService:
                     "report": final_report
                 }
             else:
-                yield {
+                 yield {
                     "type": "result",
                     "converted_ddl": "",
                     "logs": logs,
@@ -702,7 +716,7 @@ class SchemaAgentService:
                 }
 
         except Exception as e:
-            logger.error(f"Error in multi_turn_v2: {e}", exc_info=True)
+            logger.error(f"Error in multi_turn_v2_claude: {e}", exc_info=True)
             yield {"type": "log", "content": f"Error: {str(e)}"}
             yield {
                 "type": "result",
