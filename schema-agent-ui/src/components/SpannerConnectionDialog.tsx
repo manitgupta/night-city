@@ -1,14 +1,15 @@
 import { useState } from "react";
-import { X, Cloud, CheckCircle, Database } from "lucide-react";
+import { X, Cloud, CheckCircle, Database, AlertCircle } from "lucide-react";
 
 interface SpannerConnectionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect: (config: any) => void;
   isConnecting: boolean;
+  error?: string | null;
 }
 
-export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecting }: SpannerConnectionDialogProps) {
+export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecting, error }: SpannerConnectionDialogProps) {
   const [config, setConfig] = useState({
     projectId: '',
     instanceId: '',
@@ -71,6 +72,13 @@ export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecti
              </div>
           </div>
 
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2 text-red-200 text-sm animate-in fade-in slide-in-from-top-2">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+              <span>{error}</span>
+            </div>
+          )}
         </div>
 
         {/* Footer */}

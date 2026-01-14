@@ -14,6 +14,8 @@ interface SchemaEditorProps {
   diffMode?: boolean;
   diffOriginal?: string;
   diffModified?: string;
+  value?: string;
+  onChange?: (value: string) => void;
 }
 
 const LOADING_TEXTS = [
@@ -131,7 +133,9 @@ export function SchemaEditor({
   isLoading = false,
   diffMode = false,
   diffOriginal = "",
-  diffModified = ""
+  diffModified = "",
+  value,
+  onChange
 }: SchemaEditorProps) {
   const { sourceCode, outputCode, setSourceCode, setOutputCode, setSelection, selection } = useStore();
   const editorRef = useRef<any>(null);
@@ -197,8 +201,8 @@ export function SchemaEditor({
     });
   };
 
-  const code = type === 'source' ? sourceCode : outputCode;
-  const setCode = type === 'source' ? setSourceCode : setOutputCode;
+  const code = value !== undefined ? value : (type === 'source' ? sourceCode : outputCode);
+  const setCode = onChange !== undefined ? onChange : (type === 'source' ? setSourceCode : setOutputCode);
   const isSource = type === 'source';
   const isSelectionActive = selection?.source === type;
 

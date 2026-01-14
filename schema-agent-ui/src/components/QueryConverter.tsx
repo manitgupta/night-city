@@ -16,11 +16,15 @@ export function QueryConverter() {
   const [sourceConnected, setSourceConnected] = useState(false);
   const [spannerConnected, setSpannerConnected] = useState(false);
 
+  const [sourceConnectionError, setSourceConnectionError] = useState<string | null>(null);
+  const [spannerConnectionError, setSpannerConnectionError] = useState<string | null>(null);
+
+
 
   const [isConnectingSource, setIsConnectingSource] = useState(false);
   const [isConnectingSpanner, setIsConnectingSpanner] = useState(false);
 
-  const { chatContext, setChatContext, resetMessages, setSourceSessionId, addMessage } = useStore();
+  const { chatContext, setChatContext, resetMessages, setSourceSessionId, addMessage, querySourceCode, queryOutputCode, setQuerySourceCode, setQueryOutputCode } = useStore();
 
   // Initialize Chat for Query Conversion
   useEffect(() => {
@@ -37,6 +41,7 @@ export function QueryConverter() {
   // Mock connection handlers
   const handleConnectSource = async (config: any) => {
     setIsConnectingSource(true);
+    setSourceConnectionError(null);
     try {
       const response = await api.connectSource(config as SourceConnectionConfig);
       if (response.success) {
@@ -50,16 +55,12 @@ export function QueryConverter() {
           isHelpful: true
         });
       } else {
-        // We can show a toast or alert here
         console.error('Connection failed:', response.message);
-        // For now, let's just log it or maybe assume the dialog stays open with error?
-        // The dialog doesn't have error prop yet, so we'll just alert for now or let the user try again.
-        // Ideally we pass error back to dialog.
-        alert(`Connection Failed: ${response.message}`);
+        setSourceConnectionError(response.message);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Source connection error:', error);
-      alert('Failed to connect to source database.');
+      setSourceConnectionError(error.message || 'Failed to connect to source database.');
     } finally {
       setIsConnectingSource(false);
     }
@@ -67,6 +68,7 @@ export function QueryConverter() {
 
   const handleConnectSpanner = async (config: any) => {
     setIsConnectingSpanner(true);
+    setSpannerConnectionError(null);
     try {
       const response = await api.connectSpanner(config);
       if (response.success) {
@@ -79,16 +81,16 @@ export function QueryConverter() {
         addMessage({
           id: Date.now().toString(),
           role: 'agent',
-          content: `Successfully connected to Spanner database (${config.instanceId}/${config.databaseId})!`,
+          content: `Successfully connected to Spanner database (${config.instance_id}/${config.database_id})!`,
           isHelpful: true
         });
       } else {
         console.error('Spanner connection failed:', response.message);
-        alert(`Connection Failed: ${response.message}`);
+        setSpannerConnectionError(response.message);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Spanner connection error:', error);
-      alert('Failed to connect to Spanner database.');
+      setSpannerConnectionError(error.message || 'Failed to connect to Spanner database.');
     } finally {
       setIsConnectingSpanner(false);
     }
@@ -106,15 +108,23 @@ export function QueryConverter() {
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-200 font-sans selection:bg-indigo-500/30 relative">
       <SourceConnectionDialog
         isOpen={showSourceDialog}
-        onClose={() => setShowSourceDialog(false)}
+        onClose={() => {
+          setShowSourceDialog(false);
+          setSourceConnectionError(null);
+        }}
         onConnect={handleConnectSource}
         isConnecting={isConnectingSource}
+        error={sourceConnectionError}
       />
       <SpannerConnectionDialog
         isOpen={showSpannerDialog}
-        onClose={() => setShowSpannerDialog(false)}
+        onClose={() => {
+          setShowSpannerDialog(false);
+          setSpannerConnectionError(null);
+        }}
         onConnect={handleConnectSpanner}
         isConnecting={isConnectingSpanner}
+        error={spannerConnectionError}
       />
 
       {/* Header */}
@@ -147,6 +157,8 @@ export function QueryConverter() {
               title="Source Query"
               type="source"
               showHint={true}
+              value={querySourceCode}
+              onChange={setQuerySourceCode}
               headerActions={
                 <div className="flex items-center gap-2">
                   <button
@@ -184,6 +196,8 @@ export function QueryConverter() {
               title="Spanner Query"
               type="output" // Reusing output type from schema editor for target
               showHint={true}
+              value={queryOutputCode}
+              onChange={setQueryOutputCode}
               headerActions={
                 <div className="flex items-center gap-2">
                   <button

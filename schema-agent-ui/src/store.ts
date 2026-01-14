@@ -34,6 +34,12 @@ interface AppState {
   spannerSessionId: string | null;
   setSpannerSessionId: (id: string | null) => void;
 
+  // Query Conversion State
+  querySourceCode: string;
+  queryOutputCode: string;
+  setQuerySourceCode: (code: string) => void;
+  setQueryOutputCode: (code: string) => void;
+
   setSourceCode: (code: string) => void;
   setOutputCode: (code: string) => void;
   setSelection: (selection: AppState['selection']) => void;
@@ -57,6 +63,13 @@ interface AppState {
 export const useStore = create<AppState>((set) => ({
   sourceCode: "",
   outputCode: "",
+
+  // Query Conversion State
+  querySourceCode: "",
+  queryOutputCode: "",
+  setQuerySourceCode: (code) => set({ querySourceCode: code }),
+  setQueryOutputCode: (code) => set({ queryOutputCode: code }),
+
   selection: null,
   messages: [], // Initialized by components based on context
 

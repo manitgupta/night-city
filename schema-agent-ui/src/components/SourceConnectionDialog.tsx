@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { X, Database, CheckCircle, Server, User, Key, Globe } from "lucide-react";
+import { X, Database, CheckCircle, Server, User, Key, Globe, AlertCircle } from "lucide-react";
 
 interface SourceConnectionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConnect: (config: any) => void;
   isConnecting: boolean;
+  error?: string | null;
 }
 
 const DIALECTS = [
@@ -16,7 +17,7 @@ const DIALECTS = [
   { id: 'cassandra', name: 'Cassandra' }
 ];
 
-export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnecting }: SourceConnectionDialogProps) {
+export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnecting, error }: SourceConnectionDialogProps) {
   const [config, setConfig] = useState({
     dialect: 'mysql',
     host: '',
@@ -127,6 +128,14 @@ export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnectin
               </div>
             </div>
           </div>
+
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2 text-red-200 text-sm animate-in fade-in slide-in-from-top-2">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+              <span>{error}</span>
+            </div>
+          )}
 
         </div>
 

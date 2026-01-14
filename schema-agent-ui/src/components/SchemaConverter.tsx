@@ -39,7 +39,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
 
-  const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages } = useStore();
+  const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages } = useStore();
 
   // Initialize Chat for Schema Conversion
   useEffect(() => {
@@ -449,6 +449,8 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
               type="source"
               readOnly={isSourceLocked}
               showHint={true}
+              value={sourceCode}
+              onChange={setSourceCode} 
               headerActions={
                 <div className="flex items-center gap-2">
                   {/* Dialect Dropdown */}
@@ -582,6 +584,8 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
               title={reviewState.isActive ? "Review Fix (Diff View)" : "Cloud Spanner DDL"} 
               type="output"
               showHint={true}
+              value={outputCode}
+              onChange={setOutputCode}
               readOnly={false} // Always editable/selectable per previous request
               isLoading={isConverting}
               diffMode={reviewState.isActive}
