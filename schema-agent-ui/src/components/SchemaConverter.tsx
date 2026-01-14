@@ -39,7 +39,19 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
 
-  const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState } = useStore();
+  const { setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages } = useStore();
+
+  // Initialize Chat for Schema Conversion
+  useEffect(() => {
+    if (chatContext !== 'schema') {
+      setChatContext('schema');
+      resetMessages({
+        id: '1',
+        role: 'agent',
+        content: "Hello! Welcome to Night City. I am your schema conversion AI assistant! I can help you understand the converted schema, and even help you make changes! (ask to rename a column or add a new column, etc.)"
+      });
+    }
+  }, [chatContext, setChatContext, resetMessages]);
 
   // Invalidate validation result when output code changes
   useEffect(() => {

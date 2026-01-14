@@ -58,7 +58,7 @@ export function LandingPage({ onSelectMode }: LandingPageProps) {
               </p>
               
               <div className="flex items-center gap-2 text-sm font-medium text-indigo-400 group-hover:translate-x-1 transition-transform">
-                <span>Start Migration</span>
+                <span>Start Schema Conversion</span>
                 <ArrowRight size={16} />
               </div>
             </div>

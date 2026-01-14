@@ -40,6 +40,10 @@ interface AppState {
     modifiedCode: string;
     explanation: string;
   };
+  // Chat Context
+  chatContext: 'schema' | 'query' | null;
+  setChatContext: (context: 'schema' | 'query') => void;
+  resetMessages: (initialMessage?: Message) => void;
   setReviewState: (state: AppState['reviewState']) => void;
 }
 
@@ -47,13 +51,8 @@ export const useStore = create<AppState>((set) => ({
   sourceCode: "",
   outputCode: "",
   selection: null,
-  messages: [
-    {
-      id: '1',
-      role: 'agent',
-      content: "Hello! Welcome to Night City. I am your schema conversion AI assistant! I can help you understand the converted schema, and even help you make changes! (ask to rename a column or add a new column, etc.)"
-    }
-  ],
+  messages: [], // Initialized by components based on context
+
   isAgentTyping: false,
 
   setSourceCode: (code) => set({ sourceCode: code }),
@@ -68,5 +67,9 @@ export const useStore = create<AppState>((set) => ({
     modifiedCode: "",
     explanation: ""
   },
+  chatContext: null,
+  setChatContext: (context) => set({ chatContext: context }),
+  resetMessages: (initialMessage) => set({ messages: initialMessage ? [initialMessage] : [] }),
+
   setReviewState: (reviewState) => set({ reviewState }),
 }));
