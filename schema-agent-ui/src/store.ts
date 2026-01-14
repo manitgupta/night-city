@@ -27,6 +27,13 @@ interface AppState {
   messages: Message[];
   isAgentTyping: boolean;
 
+  // Source Connection State
+  sourceSessionId: string | null;
+  setSourceSessionId: (id: string | null) => void;
+
+  spannerSessionId: string | null;
+  setSpannerSessionId: (id: string | null) => void;
+
   setSourceCode: (code: string) => void;
   setOutputCode: (code: string) => void;
   setSelection: (selection: AppState['selection']) => void;
@@ -54,6 +61,12 @@ export const useStore = create<AppState>((set) => ({
   messages: [], // Initialized by components based on context
 
   isAgentTyping: false,
+  sourceSessionId: null,
+
+  setSourceSessionId: (id) => set({ sourceSessionId: id }),
+
+  spannerSessionId: null,
+  setSpannerSessionId: (id: string | null) => set({ spannerSessionId: id }),
 
   setSourceCode: (code) => set({ sourceCode: code }),
   setOutputCode: (code) => set({ outputCode: code }),

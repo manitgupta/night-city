@@ -27,8 +27,34 @@ export interface MigrateResponse {
 }
 
 export interface ConfigResponse {
-    spanner_project_id: string;
     spanner_instance_id: string;
+}
+
+export interface SourceConnectionConfig {
+    dialect: string;
+    host: string;
+    port: string;
+    username: string;
+    password: string;
+    database: string;
+}
+
+export interface SourceConnectionResponse {
+    success: boolean;
+    message: string;
+    session_id?: string;
+}
+
+export interface SpannerConnectionConfig {
+    project_id: string;
+    instance_id: string;
+    database_id: string;
+}
+
+export interface SpannerConnectionResponse {
+    success: boolean;
+    message: string;
+    session_id?: string;
 }
 
 
@@ -263,6 +289,40 @@ export const api = {
         if (!response.ok) {
             throw new Error("Failed to fetch config");
         }
+        return response.json();
+    },
+
+    async connectSource(config: SourceConnectionConfig): Promise<SourceConnectionResponse> {
+        const response = await fetch(`${API_BASE_URL}/source/connect`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(config),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Connection failed: ${response.statusText}`);
+        }
+
+        return response.json();
+    },
+
+    async connectSpanner(config: SpannerConnectionConfig): Promise<SpannerConnectionResponse> {
+        const response = await fetch(`${API_BASE_URL}/spanner/connect`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(config),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: "Unknown error" }));
+            throw new Error(errorData.detail || `Connection failed: ${response.statusText}`);
+        }
+
         return response.json();
     }
 };

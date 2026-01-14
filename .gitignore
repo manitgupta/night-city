@@ -3,6 +3,7 @@ schema-agent-ui/dist
 schema-agent-backend/venv
 schema-agent-backend/__pycache__/
 schema-agent-backend/app/__pycache__/
+schema-agent-backend/app/query/__pycache__/
 .env
 schema-agent-backend/server.log
 toolbox

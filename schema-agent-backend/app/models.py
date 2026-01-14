@@ -35,3 +35,26 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     explanation: str
     fixed_ddl: str
+
+class SourceConnectionConfig(BaseModel):
+    dialect: str
+    host: str
+    port: str | int
+    username: str
+    password: str
+    database: str
+
+class SourceConnectionResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: Optional[str] = None
+
+class SpannerConnectionConfig(BaseModel):
+    project_id: str
+    instance_id: str
+    database_id: str
+
+class SpannerConnectionResponse(BaseModel):
+    success: bool
+    message: str
+    session_id: Optional[str] = None

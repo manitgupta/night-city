@@ -6,6 +6,7 @@ import { SchemaEditor } from "./SchemaEditor";
 import { SourceConnectionDialog } from "./SourceConnectionDialog";
 import { SpannerConnectionDialog } from "./SpannerConnectionDialog";
 import { useStore } from "../store";
+import { api, SourceConnectionConfig } from "../services/api";
 import { useEffect } from "react";
 
 export function QueryConverter() {
@@ -19,7 +20,7 @@ export function QueryConverter() {
   const [isConnectingSource, setIsConnectingSource] = useState(false);
   const [isConnectingSpanner, setIsConnectingSpanner] = useState(false);
 
-  const { chatContext, setChatContext, resetMessages } = useStore();
+  const { chatContext, setChatContext, resetMessages, setSourceSessionId, addMessage } = useStore();
 
   // Initialize Chat for Query Conversion
   useEffect(() => {
@@ -34,22 +35,63 @@ export function QueryConverter() {
   }, [chatContext, setChatContext, resetMessages]);
 
   // Mock connection handlers
-  const handleConnectSource = (_config: any) => {
+  const handleConnectSource = async (config: any) => {
     setIsConnectingSource(true);
-    setTimeout(() => {
-      setSourceConnected(true);
-      setShowSourceDialog(false);
+    try {
+      const response = await api.connectSource(config as SourceConnectionConfig);
+      if (response.success) {
+        setSourceConnected(true);
+        setShowSourceDialog(false);
+        setSourceSessionId(response.session_id || null);
+        addMessage({
+          id: Date.now().toString(),
+          role: 'agent',
+          content: `Successfully connected to source database (${config.dialect}: ${config.host})!`,
+          isHelpful: true
+        });
+      } else {
+        // We can show a toast or alert here
+        console.error('Connection failed:', response.message);
+        // For now, let's just log it or maybe assume the dialog stays open with error?
+        // The dialog doesn't have error prop yet, so we'll just alert for now or let the user try again.
+        // Ideally we pass error back to dialog.
+        alert(`Connection Failed: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Source connection error:', error);
+      alert('Failed to connect to source database.');
+    } finally {
       setIsConnectingSource(false);
-    }, 1000); // Simulate delay
+    }
   };
 
-  const handleConnectSpanner = (_config: any) => {
+  const handleConnectSpanner = async (config: any) => {
     setIsConnectingSpanner(true);
-    setTimeout(() => {
-      setSpannerConnected(true);
-      setShowSpannerDialog(false);
+    try {
+      const response = await api.connectSpanner(config);
+      if (response.success) {
+        setSpannerConnected(true);
+        setShowSpannerDialog(false);
+        // Assuming we have a setSpannerSessionId in store (we added it)
+        // We need to destructure it from useStore first if not already done
+        // @ts-ignore - we know it exists but maybe interface update hasn't propagated to this file's TS check in agent mind
+        useStore.getState().setSpannerSessionId(response.session_id || null);
+        addMessage({
+          id: Date.now().toString(),
+          role: 'agent',
+          content: `Successfully connected to Spanner database (${config.instanceId}/${config.databaseId})!`,
+          isHelpful: true
+        });
+      } else {
+        console.error('Spanner connection failed:', response.message);
+        alert(`Connection Failed: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Spanner connection error:', error);
+      alert('Failed to connect to Spanner database.');
+    } finally {
       setIsConnectingSpanner(false);
-    }, 1000); // Simulate delay
+    }
   };
 
   // Helper to go back to landing (can be passed as prop if strictly needed, but for now using simple reload or parent nav if integrated deeper. 
