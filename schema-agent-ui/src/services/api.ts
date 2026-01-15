@@ -27,6 +27,7 @@ export interface MigrateResponse {
 }
 
 export interface ConfigResponse {
+    spanner_project_id: string;
     spanner_instance_id: string;
 }
 
