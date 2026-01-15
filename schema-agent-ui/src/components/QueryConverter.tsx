@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, ChevronDown, Database, Settings, Play, CheckCircle } from "lucide-react";
+import { Search, ChevronDown, Database, Settings, Wand2, CheckCircle } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ChatInterface } from "./ChatInterface";
 import { SchemaEditor } from "./SchemaEditor";
@@ -316,12 +316,12 @@ export function QueryConverter() {
                   <button
                     onClick={handleConvertQuery}
                     disabled={!sourceConnected || !spannerConnected || isConverting}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all duration-200 border ${sourceConnected && spannerConnected
-                      ? "bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600 shadow-[0_0_15px_rgba(99,102,241,0.5)] cursor-pointer"
-                      : "bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed opacity-50"
-                      } ${isConverting ? "animate-pulse" : ""}`}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceConnected && spannerConnected && !isConverting
+                      ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
+                      : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
+                      } ${isConverting ? "opacity-80 cursor-wait" : ""}`}
                   >
-                    <Play size={12} fill="currentColor" />
+                    <Wand2 size={14} className={isConverting ? "animate-spin" : ""} />
                     {isConverting ? "Converting..." : "Convert"}
                   </button>
                 </div>

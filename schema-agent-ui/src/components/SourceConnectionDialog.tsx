@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Database, CheckCircle, Server, User, Key, Globe, AlertCircle } from "lucide-react";
+import { X, Database, CheckCircle, Server, User, Key, Globe, AlertCircle, ChevronDown } from "lucide-react";
 
 interface SourceConnectionDialogProps {
   isOpen: boolean;
@@ -26,15 +26,16 @@ export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnectin
     password: '',
     database: ''
   });
+  const [showDropdown, setShowDropdown] = useState(false);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 ring-1 ring-white/10">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl max-w-md w-full flex flex-col animate-in zoom-in-95 duration-200 ring-1 ring-white/10">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950/50 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-zinc-800 bg-zinc-950/50 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-2 text-zinc-100">
             <Database size={18} className="text-indigo-400" />
             <h3 className="font-semibold">Connect Source Database</h3>
@@ -49,15 +50,44 @@ export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnectin
           
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-zinc-400">Database Type</label>
-            <select
-              value={config.dialect}
-              onChange={(e) => setConfig({ ...config, dialect: e.target.value })}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-            >
-              {DIALECTS.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all flex items-center justify-between group"
+              >
+                <div className="flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${config.dialect ? 'bg-indigo-500' : 'bg-zinc-600'}`} />
+                  <span>{DIALECTS.find(d => d.id === config.dialect)?.name}</span>
+                </div>
+                <ChevronDown size={14} className={`text-zinc-500 transition-transform duration-200 group-hover:text-zinc-300 ${showDropdown ? "rotate-180" : ""}`} />
+              </button>
+
+              {showDropdown && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowDropdown(false)} />
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-20 overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-100">
+                    {DIALECTS.map(d => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => {
+                          setConfig({ ...config, dialect: d.id });
+                          setShowDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${config.dialect === d.id
+                            ? "bg-indigo-500/10 text-indigo-400"
+                            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                          }`}
+                      >
+                        <div className={`w-1.5 h-1.5 rounded-full ${config.dialect === d.id ? "bg-indigo-500" : "bg-transparent"}`} />
+                        {d.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -140,7 +170,7 @@ export function SourceConnectionDialog({ isOpen, onClose, onConnect, isConnectin
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end gap-3">
+        <div className="px-6 py-4 bg-zinc-950/50 border-t border-zinc-800 flex justify-end gap-3 rounded-b-2xl">
           <button
             onClick={onClose}
             className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg text-sm font-medium transition-colors"
