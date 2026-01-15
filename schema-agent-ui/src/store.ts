@@ -58,6 +58,13 @@ interface AppState {
   setChatContext: (context: 'schema' | 'query') => void;
   resetMessages: (initialMessage?: Message) => void;
   setReviewState: (state: AppState['reviewState']) => void;
+  // Spanner Config State (Persisted for Query Conversion)
+  spannerConfig: {
+    projectId: string;
+    instanceId: string;
+    databaseId: string;
+  } | null;
+  setSpannerConfig: (config: AppState['spannerConfig']) => void;
 }
 
 export const useStore = create<AppState>((set) => ({
@@ -98,4 +105,7 @@ export const useStore = create<AppState>((set) => ({
   resetMessages: (initialMessage) => set({ messages: initialMessage ? [initialMessage] : [] }),
 
   setReviewState: (reviewState) => set({ reviewState }),
+
+  spannerConfig: null,
+  setSpannerConfig: (config) => set({ spannerConfig: config }),
 }));

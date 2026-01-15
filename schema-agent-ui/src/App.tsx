@@ -15,7 +15,10 @@ function App() {
       )}
 
       {currentMode === 'schema' && (
-        <SchemaConverter onBack={() => setCurrentMode('landing')} />
+        <SchemaConverter
+          onBack={() => setCurrentMode('landing')}
+          onNavigateToQuery={() => setCurrentMode('query')}
+        />
       )}
 
       {currentMode === 'query' && (

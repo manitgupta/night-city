@@ -2,19 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import Joyride, { CallBackProps, STATUS, Step, Styles } from 'react-joyride';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, Database } from 'lucide-react';
+import { Sparkles, Code2 } from 'lucide-react';
 
 interface IntroductionWizardProps {
   onComplete?: () => void;
 }
 
-export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComplete }) => {
+export const QueryIntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComplete }) => {
   const [run, setRun] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
-    // Check if user has seen the intro
-    const hasSeenIntro = localStorage.getItem('night_city_intro_seen');
+    // Check if user has seen the query intro
+    const hasSeenIntro = localStorage.getItem('night_city_query_intro_seen');
     if (!hasSeenIntro) {
       setShowWelcome(true);
     }
@@ -27,7 +27,7 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
 
   const handleSkipTour = () => {
     setShowWelcome(false);
-    localStorage.setItem('night_city_intro_seen', 'true');
+    localStorage.setItem('night_city_query_intro_seen', 'true');
     if (onComplete) onComplete();
   };
 
@@ -37,7 +37,7 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
 
     if (finishedStatuses.includes(status)) {
       setRun(false);
-      localStorage.setItem('night_city_intro_seen', 'true');
+      localStorage.setItem('night_city_query_intro_seen', 'true');
       if (onComplete) onComplete();
     }
   };
@@ -45,39 +45,39 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
   const steps: Step[] = [
     {
       target: 'body',
-      content: 'Welcome to the Schema Conversion Studio! This tool helps you convert legacy SQL schemas to Google Cloud Spanner seamlessly.',
+      content: 'Welcome to the Query Conversion Studio! Here you can convert complex SQL queries to Spanner-optimized SQL.',
       placement: 'center',
       disableBeacon: true,
     },
     {
       target: '#schema-editor-source',
-      content: 'Paste your legacy SQL schema here (MySQL, PostgreSQL, Oracle, SQL Server, or Cassandra). You can also lock it to prevent accidental edits.',
+      content: 'Paste your legacy SQL query here. The agent supports complex joins, subqueries, and non-standard functions.',
       placement: 'right',
     },
     {
-      target: '#dialect-dropdown',
-      content: 'Make sure to select the correct source dialect so the agent understands your schema nuances.',
+      target: '#query-source-trigger',
+      content: 'Connect to your source database here to allow the agent to inspect table statistics and schema when optimizing your query.',
     },
     {
-      target: '#convert-button',
-      content: 'Click Convert to translate your schema. The agent will check for compatibility and apply Spanner best practices.',
+      target: '#query-spanner-trigger',
+      content: 'Connect to your Spanner instance here. This is required for validation and running the converted queries.',
+    },
+    {
+      target: '#query-convert-button',
+      content: 'Click Convert to let the agent translate your query. It will check for compatibility and optimize for Spanner\'s distributed architecture.',
     },
     {
       target: '#schema-editor-output',
-      content: 'The converted Spanner DDL appears here. You can edit it directly if needed.',
+      content: 'The converted Spanner SQL will appear here. You can manually edit it if needed.',
       placement: 'left',
     },
     {
-      target: '#validate-button',
-      content: 'Validate your schema against Spanner rules. You must confirm validity before migration.',
-    },
-    {
-      target: '#migrate-button',
-      content: 'Once validated, click Migrate to create your real Spanner database and apply the schema.',
+      target: '#query-validate-button',
+      content: 'Run the query directly on your Spanner database! This verifies it not only parses but returns the correct data.',
     },
     {
       target: '#chat-interface',
-      content: 'Chat with the agent to understand the schema, ask for refactoring, or debug issues.',
+      content: 'Chat with the agent to explain the query logic, request performance tuning, or debug execution errors.',
       placement: 'left',
     },
   ];
@@ -124,7 +124,6 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
 
   return (
     <>
-      {/* Welcome Modal */}
       <AnimatePresence>
         {showWelcome && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
@@ -141,20 +140,19 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-8 max-w-md w-full overflow-hidden"
             >
-              {/* Decorative background effects */}
-              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
               <div className="relative z-10 flex flex-col items-center text-center">
-                <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-xl flex items-center justify-center mb-6">
-                  <Database className="text-white" size={32} />
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl shadow-xl flex items-center justify-center mb-6">
+                  <Code2 className="text-white" size={32} />
                 </div>
 
-                <h2 className="text-2xl font-bold text-white mb-2">Schema Conversion Studio</h2>
+                <h2 className="text-2xl font-bold text-white mb-2">Query Conversion Studio</h2>
                 <p className="text-zinc-400 mb-8 leading-relaxed">
-                  Your intelligent companion for converting and optimizing databases for Google Cloud Spanner.
+                  Ready to translate your SQL queries to Spanner?
                   <br /><br />
-                  Let's take a quick tour of the schema conversion features.
+                  Let's walk through the tools available for optimizing and verifying your queries.
                 </p>
 
                 <div className="flex flex-col w-full gap-3">
@@ -192,7 +190,7 @@ export const IntroductionWizard: React.FC<IntroductionWizardProps> = ({ onComple
           disableAnimation: true,
         }}
         locale={{
-          last: "Finish",
+          last: "Start Converting",
           skip: "Skip Tour"
         }}
       />

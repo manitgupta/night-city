@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Cloud, CheckCircle, Database, AlertCircle } from "lucide-react";
+import { useStore } from "../store";
 
 interface SpannerConnectionDialogProps {
   isOpen: boolean;
@@ -10,10 +11,11 @@ interface SpannerConnectionDialogProps {
 }
 
 export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecting, error }: SpannerConnectionDialogProps) {
+  const { spannerConfig } = useStore();
   const [config, setConfig] = useState({
-    projectId: '',
-    instanceId: '',
-    databaseId: ''
+    projectId: spannerConfig?.projectId || '',
+    instanceId: spannerConfig?.instanceId || '',
+    databaseId: spannerConfig?.databaseId || ''
   });
 
   if (!isOpen) return null;

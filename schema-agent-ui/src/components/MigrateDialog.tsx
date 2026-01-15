@@ -12,9 +12,10 @@ interface MigrateDialogProps {
     database_uri: string;
     message: string;
   } | null;
+  onNavigateToQuery: () => void;
 }
 
-export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrationResult }: MigrateDialogProps) {
+export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrationResult, onNavigateToQuery }: MigrateDialogProps) {
   const [projectId, setProjectId] = useState('');
   const [instanceId, setInstanceId] = useState('');
   const [databaseId, setDatabaseId] = useState('');
@@ -65,6 +66,17 @@ export function MigrateDialog({ isOpen, onClose, onMigrate, isMigrating, migrati
               <ExternalLink size={16} />
               Open in Cloud Console
             </a>
+
+            <button
+              onClick={() => {
+                onClose();
+                onNavigateToQuery();
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-[1.02] active:scale-[0.98] mb-3"
+            >
+              <CheckCircle size={16} />
+              Next: Convert Queries
+            </button>
 
             <button
               onClick={onClose}

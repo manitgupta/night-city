@@ -18,9 +18,10 @@ const SOURCE_DIALECTS = [
 
 interface SchemaConverterProps {
     onBack: () => void;
+  onNavigateToQuery: () => void;
 }
 
-export function SchemaConverter({ onBack }: SchemaConverterProps) {
+export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterProps) {
   const [isSourceLocked, setIsSourceLocked] = useState(false); // Default to unlocked so user can paste
   const [isConverting, setIsConverting] = useState(false);
 
@@ -30,8 +31,6 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
   const [validationResult, setValidationResult] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalyzeResponse | null>(null);
-  const [isAutoMode, setIsAutoMode] = useState(true); // Auto-mode state
-
   // Replaced local isReviewing/originalOutputCode with Store state
   const [showMigrateDialog, setShowMigrateDialog] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
@@ -39,7 +38,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
 
-  const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages } = useStore();
+  const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages, setSpannerConfig } = useStore();
 
   // Initialize Chat for Schema Conversion
   useEffect(() => {
@@ -159,6 +158,13 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
           role: 'agent',
           content: `✅ Migration Successful! \n\nDatabase created at: \`${result.database_uri}\``
         });
+
+        // Persist Spanner config for Query Conversion
+        setSpannerConfig({
+          projectId,
+          instanceId,
+          databaseId
+        });
       } else {
         // Show error but keep dialog open? Or close and show in chat?
         // Let's show in chat and keep dialog open so they can retry if it's a typo
@@ -227,9 +233,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
         }
       };
 
-      const result = isAutoMode
-        ? await api.convertSchemaAuto(sourceCode, sourceDialect, streamCallback)
-        : await api.convertSchemaStream(sourceCode, sourceDialect, streamCallback);
+      const result = await api.convertSchemaAuto(sourceCode, sourceDialect, streamCallback);
 
 
       setOutputCode(result.converted_ddl);
@@ -251,7 +255,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
 
       // Add helpful follow-up message
       setTimeout(() => {
-        const isAutoSuccess = isAutoMode && result.report && result.report.includes("Verified valid");
+        const isAutoSuccess = result.report && result.report.includes("Verified valid");
 
         if (isAutoSuccess) {
           // Auto-mode success: Enable Migrate, stop pulsing
@@ -309,6 +313,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
         onMigrate={handleMigrate}
         isMigrating={isMigrating}
         migrationResult={migrationResult}
+        onNavigateToQuery={onNavigateToQuery}
       />
       
       {validationResult && showValidationModal && !reviewState.isActive && (
@@ -508,7 +513,7 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
                     {isSourceLocked ? <Lock size={14} /> : <Unlock size={14} />}
                   </button>
 
-                  <div className="mx-2"></div>
+                  <div className="w-px h-4 bg-zinc-800 mx-1" />
 
                   {/* Line Count Warning */}
                   {sourceCode.split('\n').length > 1000 && (
@@ -523,44 +528,12 @@ export function SchemaConverter({ onBack }: SchemaConverterProps) {
 
                   {/* Always show controls, but disable if invalid source */}
                   <div className="flex items-center gap-2">
-                    {/* Auto Mode Toggle with Slick Switch */}
-                    <div id="auto-mode-toggle" className={`group relative flex items-center mr-3 ${!sourceCode.trim() ? "opacity-50 pointer-events-none" : ""}`}>
-                      <button
-                        onClick={() => setIsAutoMode(!isAutoMode)}
-                        disabled={!sourceCode.trim()}
-                        className={`
-                            relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-zinc-900 ring-1 ring-inset ring-white/5
-                            ${isAutoMode ? 'bg-indigo-600' : 'bg-zinc-700'}
-                          `}
-                      >
-                        <span className="sr-only">Enable Auto Mode</span>
-                        <span
-                          className={`
-                              inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 ease-out shadow-sm
-                              ${isAutoMode ? 'translate-x-[18px]' : 'translate-x-1'}
-                            `}
-                        />
-                      </button>
-                      <label
-                        onClick={() => sourceCode.trim() && setIsAutoMode(!isAutoMode)}
-                        className="ml-2 text-xs font-medium text-zinc-400 cursor-pointer group-hover:text-zinc-200 transition-colors select-none"
-                      >
-                        Auto mode
-                      </label>
-
-                      {/* Refined Floating Tooltip - Positioned BELOW to avoid clipping */}
-                      <div className="absolute top-full mt-3 left-1/2 -translate-x-1/2 w-max max-w-[200px] p-2.5 bg-zinc-900/95 backdrop-blur-sm border border-zinc-700/50 rounded-lg text-xs text-zinc-300 shadow-2xl opacity-0 group-hover:opacity-100 transition-all duration-200 transform group-hover:translate-y-0 -translate-y-2 pointer-events-none z-[100]">
-                        <div className="font-semibold text-indigo-400 mb-0.5">Auto-Correction Loop</div>
-                        <div className="text-zinc-400 leading-tight">The agent runs a multi-turn loop to iteratively validate & repair the schema using Spanner as a feedback loop. This is slower but more accurate.</div>
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-zinc-900/95"></div>
-                      </div>
-                    </div>
 
                     <button
                       id="convert-button"
                       onClick={handleConvert}
                       disabled={!sourceCode.trim() || !sourceDialect || isConverting || sourceCode.split('\n').length > 1000}
-                      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceCode.trim() && sourceDialect && !isConverting && sourceCode.split('\n').length <= 1000
+                      className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ${sourceCode.trim() && sourceDialect && !isConverting && sourceCode.split('\n').length <= 1000
                         ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
                         : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
                         } ${isConverting ? "opacity-80 cursor-wait" : ""}`}

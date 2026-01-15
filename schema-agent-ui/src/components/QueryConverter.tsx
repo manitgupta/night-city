@@ -5,6 +5,7 @@ import { ChatInterface } from "./ChatInterface";
 import { SchemaEditor } from "./SchemaEditor";
 import { SourceConnectionDialog } from "./SourceConnectionDialog";
 import { SpannerConnectionDialog } from "./SpannerConnectionDialog";
+import { QueryIntroductionWizard } from "./QueryIntroductionWizard";
 import { useStore } from "../store";
 import { api, SourceConnectionConfig } from "../services/api";
 import { useEffect } from "react";
@@ -257,6 +258,7 @@ export function QueryConverter() {
         isConnecting={isConnectingSpanner}
         error={spannerConnectionError}
       />
+      <QueryIntroductionWizard />
 
       {/* Header */}
       <header className="h-14 border-b border-zinc-800 bg-zinc-950/50 backdrop-blur-xl flex items-center justify-between px-6 shrink-0 z-10 pl-16">
@@ -293,6 +295,7 @@ export function QueryConverter() {
               headerActions={
                 <div className="flex items-center gap-2">
                   <button
+                    id="query-source-trigger"
                     onClick={() => setShowSourceDialog(true)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${sourceConnected
                       ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20"
@@ -314,6 +317,7 @@ export function QueryConverter() {
                   </button>
 
                   <button
+                    id="query-convert-button"
                     onClick={handleConvertQuery}
                     disabled={!sourceConnected || !spannerConnected || isConverting}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceConnected && spannerConnected && !isConverting
@@ -344,6 +348,7 @@ export function QueryConverter() {
               headerActions={
                 <div className="flex items-center gap-2">
                   <button
+                    id="query-validate-button"
                     onClick={handleValidateQuery}
                     disabled={!spannerConnected || isValidating || !queryOutputCode.trim()}
                     className={`flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md border border-zinc-700 hover:border-zinc-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -358,6 +363,7 @@ export function QueryConverter() {
                   </button>
                   <div className="h-4 w-px bg-zinc-800 mx-1" />
                   <button
+                    id="query-spanner-trigger"
                     onClick={() => setShowSpannerDialog(true)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${spannerConnected
                       ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20"
