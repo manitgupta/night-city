@@ -11,9 +11,10 @@ from toolbox_core import ToolboxClient
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-from app.prompts import generate_cot_prompt
 from app.context_manager import context_manager
 from app.spanner_tool import SpannerVerificationTool
+from app.session_store import SessionStore
+from app.prompts import generate_cot_prompt, generate_query_conversion_prompt
 
 # ... (Logging config remains same)
 
@@ -821,6 +822,210 @@ class SchemaAgentService:
             logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
             yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
 
+
+    async def multi_turn_convert_query_stream(self, source_query: str, source_session_id: str, spanner_session_id: str, max_retries: int = 15):
+        logger.info(f"Starting Query Conversion (Max Retries: {max_retries})")
+        
+        # Initialize logs and verified_sql tracker
+        logs = []
+        verified_sql = None
+
+        # 1. Retrieve Tools
+        store = SessionStore.get_instance()
+        logger.info(f"Retrieving tools for Session IDs - Source: {source_session_id}, Spanner: {spanner_session_id}")
+        logger.info(f"Available Tool Keys in Store: {list(store._tools.keys())}")
+        
+        source_tool = store.get_tool(source_session_id)
+        spanner_tool = store.get_tool(spanner_session_id)
+        
+        if not source_tool: logger.error(f"Source Tool not found for ID: {source_session_id}")
+        if not spanner_tool: logger.error(f"Spanner Tool not found for ID: {spanner_session_id}")
+        
+        tool_declarations = []
+        
+        # Define Tool Functions
+        async def run_source_query(sql: str):
+            if not source_tool: return {"error": "Source DB not connected"}
+            return await source_tool.run_query(sql)
+
+        async def explain_source_query(sql: str):
+            if not source_tool: return {"error": "Source DB not connected"}
+            return await source_tool.explain_query(sql)
+
+        async def run_spanner_query(sql: str):
+            if not spanner_tool: return {"error": "Spanner DB not connected"}
+            return await spanner_tool.run_query(sql)
+
+        async def explain_spanner_query(sql: str):
+            if not spanner_tool: return {"error": "Spanner DB not connected"}
+            return await spanner_tool.explain_query(sql)
+
+        # Declare Schema
+        tool_declarations.append(types.FunctionDeclaration(
+            name="run_source_query",
+            description="Executes a SELECT query on the Source Database to view data or verify logic.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
+        ))
+        tool_declarations.append(types.FunctionDeclaration(
+            name="explain_source_query",
+            description="Runs EXPLAIN on the Source Database to understand the query plan.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
+        ))
+        tool_declarations.append(types.FunctionDeclaration(
+            name="run_spanner_query",
+            description="Executes a query on Spanner. Use this to VERIFY your converted query.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
+        ))
+        tool_declarations.append(types.FunctionDeclaration(
+            name="explain_spanner_query",
+            description="Runs EXPLAIN (or executes) on Spanner to understand performance/validity.",
+            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
+        ))
+
+        tools = [types.Tool(function_declarations=tool_declarations)]
+
+        # 2. Initial Prompt
+        prompt = generate_query_conversion_prompt(source_query)
+        yield {"type": "log", "content": "Initializing Query Agent..."}
+        
+        # 3. Chat History
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part(text=prompt)]
+            )
+        ]
+
+        config = types.GenerateContentConfig(
+            tools=tools,
+            temperature=0.1,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            thinking_config=types.ThinkingConfig(include_thoughts=True),
+        )
+
+        turn_count = 0
+        final_query = ""
+        final_report = ""
+
+        try:
+            while turn_count < max_retries:
+                logger.info(f"Query Turn {turn_count + 1} sending...")
+                
+                response_stream = await self.client.aio.models.generate_content_stream(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config
+                )
+                
+                full_text_buffer = ""
+                function_calls = []
+                model_parts = []
+                
+                async for chunk in response_stream:
+                    if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                        for part in chunk.candidates[0].content.parts:
+                            model_parts.append(part)
+                            if part.text:
+                                is_thought = hasattr(part, "thought") and part.thought
+                                if is_thought:
+                                     yield {"type": "thought", "content": part.text}
+                                if not is_thought:
+                                    full_text_buffer += part.text
+                            if part.function_call:
+                                function_calls.append(part.function_call)
+                
+                if not model_parts:
+                    yield {"type": "log", "content": "Model returned empty response."}
+                    break
+
+                contents.append(types.Content(role="model", parts=model_parts))
+
+                # Handle Function Calls
+                if function_calls:
+                    turn_count += 1
+                    tool_outputs = []
+                    
+                    for fc in function_calls:
+                         result = {"error": "Unknown function"}
+                         log_msg = f"Agent called {fc.name}..."
+                         logs.append(log_msg)
+                         yield {"type": "log", "content": log_msg}
+                         
+                         sql_arg = fc.args.get("sql", "")
+                         if fc.name == "run_spanner_query":
+                             result = await run_spanner_query(sql_arg)
+                             # Track verified SQL if no error
+                             if isinstance(result, dict) and "rows" in result and "error" not in result:
+                                 verified_sql = sql_arg
+                         elif fc.name == "explain_spanner_query":
+                             result = await explain_spanner_query(sql_arg)
+                             # Track verified SQL if no error (and message implies success/warning but not failure)
+                             if isinstance(result, dict) and "error" not in result:
+                                 verified_sql = sql_arg
+                         elif fc.name == "run_source_query":
+                             result = await run_source_query(sql_arg)
+                        
+                         # Format result (truncate if too large)
+                         full_res_str = str(result)
+                         display_res = full_res_str[:200] + "..." if len(full_res_str) > 200 else full_res_str
+                         log_res = f"Result from {fc.name}: {display_res}"
+                         logs.append(log_res)
+                         yield {"type": "log", "content": log_res}
+                         
+                         # Check for error in result to guide agent
+                         if isinstance(result, dict) and "error" in result:
+                              yield {"type": "thought", "content": f"\\n\\n**Tool Error**: {result['error']}\\nFixing..."}
+                         
+                         tool_outputs.append(
+                            types.Part(
+                                function_response=types.FunctionResponse(
+                                    name=fc.name,
+                                    response=result
+                                )
+                            )
+                        )
+                    
+                    contents.append(types.Content(role="tool", parts=tool_outputs))
+                    continue
+                else:
+                    # Done
+                    final_query = self._extract_sql(full_text_buffer)
+                    # Use full text as report for now if not structured
+                    final_report = full_text_buffer 
+                    break
+
+            if final_query:
+                # If model hallucinated a SQL in final text that matches our verified one, great.
+                # If model hallucinated something else, but we have a verified one, prefer verified one?
+                # User requested: "Validate that we are always capturing a SQL query which has passed the spanner validation"
+                if verified_sql:
+                     final_query = verified_sql
+                
+                # Strip the SQL block from the final text for cleaner report
+                # Regex to find ```sql ... ```
+                import re
+                clean_report = re.sub(r"```sql(.*?)```", "", final_report, flags=re.DOTALL).strip()
+                # Also clean empty ``` ``` if any
+                clean_report = re.sub(r"```(.*?)```", "", clean_report, flags=re.DOTALL).strip()
+
+                yield {
+                    "type": "result",
+                    "converted_ddl": final_query, # Reuse field for query
+                    "logs": logs,
+                    "report": clean_report
+                }
+            else:
+                 yield {
+                    "type": "result",
+                    "converted_ddl": "",
+                    "logs": logs,
+                    "report": "Failed to generate query."
+                }
+
+        except Exception as e:
+            logger.error(f"Error in query conversion: {e}", exc_info=True)
+            yield {"type": "log", "content": f"Error: {str(e)}"}
+            yield {"type": "result", "converted_ddl": "", "logs": logs, "report": f"Error: {e}"}
 
     def _extract_sql(self, text: str) -> str:
         """

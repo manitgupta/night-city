@@ -125,7 +125,11 @@ export const api = {
         sourceDialect: string,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
-        return this._streamRequest(`${API_BASE_URL}/convert`, sourceDdl, sourceDialect, onChunk);
+        return this._streamRequest(
+            `${API_BASE_URL}/convert`,
+            { source_ddl: sourceDdl, source_dialect: sourceDialect },
+            onChunk
+        );
     },
 
     async convertSchemaAuto(
@@ -133,13 +137,33 @@ export const api = {
         sourceDialect: string,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
-        return this._streamRequest(`${API_BASE_URL}/multi_turn_convert_schema_stream_v2`, sourceDdl, sourceDialect, onChunk);
+        return this._streamRequest(
+            `${API_BASE_URL}/multi_turn_convert_schema_stream_v2`,
+            { source_ddl: sourceDdl, source_dialect: sourceDialect },
+            onChunk
+        );
+    },
+
+    async convertQueryAuto(
+        sourceQuery: string,
+        sourceSessionId: string,
+        spannerSessionId: string,
+        onChunk: (chunk: any) => void
+    ): Promise<ConversionResponse> {
+        return this._streamRequest(
+            `${API_BASE_URL}/multi_turn_convert_query_stream_v2`,
+            {
+                source_query: sourceQuery,
+                source_session_id: sourceSessionId,
+                spanner_session_id: spannerSessionId
+            },
+            onChunk
+        );
     },
 
     async _streamRequest(
         url: string,
-        sourceDdl: string,
-        sourceDialect: string,
+        body: any,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
         const response = await fetch(url, {
@@ -147,10 +171,7 @@ export const api = {
             headers: {
                 "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-                source_ddl: sourceDdl,
-                source_dialect: sourceDialect,
-            }),
+            body: JSON.stringify(body),
         });
 
         if (!response.ok) {
@@ -238,6 +259,19 @@ export const api = {
             throw new Error(errorData.detail || `Validation failed: ${response.statusText}`);
         }
 
+        return response.json();
+    },
+
+    async validateSpannerQuery(sessionId: string, sql: string) {
+        const response = await fetch(`${API_BASE_URL}/spanner/query`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sessionId, sql }),
+        });
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || "Failed to execute query");
+        }
         return response.json();
     },
 

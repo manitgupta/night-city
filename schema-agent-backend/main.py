@@ -29,7 +29,7 @@ REQUIRED_ENV_VARS = ["GEMINI_API_KEY", "SPANNER_PROJECT_ID", "SPANNER_INSTANCE_I
 # Import app modules AFTER loading environment variables
 # This ensures that any module-level initialization (like ADK Agent) picks up the correct env vars
 from app.agent import agent_service
-from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SourceConnectionConfig, SourceConnectionResponse, SpannerConnectionConfig, SpannerConnectionResponse
+from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SourceConnectionConfig, SourceConnectionResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest
 from app.session_store import SessionStore
 from app.query.mysql_tool import MySQLDatabaseTool
 from app.query.spanner_tool import SpannerDatabaseTool
@@ -145,6 +145,24 @@ async def multi_turn_convert_schema_stream_v2(request: ConversionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/multi_turn_convert_query_stream_v2")
+async def multi_turn_convert_query_stream_v2(request: QueryConversionRequest):
+    try:
+        from fastapi.responses import StreamingResponse
+        import json
+
+        async def generate():
+            async for chunk in agent_service.multi_turn_convert_query_stream(
+                request.source_query, 
+                request.source_session_id,
+                request.spanner_session_id
+            ):
+                yield json.dumps(chunk) + "\n"
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 from pydantic import BaseModel
 
 class ValidateRequest(BaseModel):
@@ -217,8 +235,9 @@ async def connect_source(config: SourceConnectionConfig):
             tool = MySQLDatabaseTool(config)
             is_connected = await tool.verify_connection()
             if is_connected:
-                # Store config in session
+                # Store config and tool in session
                 session_id = SessionStore.get_instance().create_session(config.dict())
+                SessionStore.get_instance().set_tool(session_id, tool)
                 return SourceConnectionResponse(
                     success=True, 
                     message="Successfully connected to source database.",
@@ -260,6 +279,22 @@ async def connect_spanner(config: SpannerConnectionConfig):
             success=False,
             message=f"Connection Error: {str(e)}"
         )
+
+@app.post("/spanner/query")
+async def run_spanner_query_endpoint(request: SpannerQueryRequest):
+    try:
+        session_id = request.session_id
+        tool = SessionStore.get_instance().get_tool(session_id)
+        
+        if not tool:
+            raise HTTPException(status_code=404, detail="Spanner session not found. Please reconnect.")
+            
+        # Run query using the tool
+        result = await tool.run_query(request.sql)
+        return result
+    except Exception as e:
+        logger.error(f"Spanner Query Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/")

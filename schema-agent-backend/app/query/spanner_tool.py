@@ -99,7 +99,7 @@ class SpannerDatabaseTool(SourceDatabaseTool):
                     pass
             
             # Placeholder:
-            return await self.run_query(f"DESCRIBE ({sql})") # Not valid spanner generic, but avoids breaking.
+            # return await self.run_query(f"DESCRIBE ({sql})") 
             # actually let's just return a message
             return {"message": "Explain not fully implemented for Spanner yet"}
 

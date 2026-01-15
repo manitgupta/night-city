@@ -58,3 +58,12 @@ class SpannerConnectionResponse(BaseModel):
     success: bool
     message: str
     session_id: Optional[str] = None
+
+class QueryConversionRequest(BaseModel):
+    source_query: str
+    source_session_id: str
+    spanner_session_id: str
+
+class SpannerQueryRequest(BaseModel):
+    session_id: str
+    sql: str

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, ChevronDown, Database, Settings } from "lucide-react";
+import { Search, ChevronDown, Database, Settings, Play, CheckCircle } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ChatInterface } from "./ChatInterface";
 import { SchemaEditor } from "./SchemaEditor";
@@ -24,7 +24,22 @@ export function QueryConverter() {
   const [isConnectingSource, setIsConnectingSource] = useState(false);
   const [isConnectingSpanner, setIsConnectingSpanner] = useState(false);
 
-  const { chatContext, setChatContext, resetMessages, setSourceSessionId, addMessage, querySourceCode, queryOutputCode, setQuerySourceCode, setQueryOutputCode } = useStore();
+  const [isConverting, setIsConverting] = useState(false);
+
+  const {
+    chatContext,
+    setChatContext,
+    resetMessages,
+    sourceSessionId,
+    setSourceSessionId,
+    spannerSessionId,
+    setSpannerSessionId,
+    addMessage,
+    querySourceCode,
+    queryOutputCode,
+    setQuerySourceCode,
+    setQueryOutputCode
+  } = useStore();
 
   // Initialize Chat for Query Conversion
   useEffect(() => {
@@ -74,10 +89,7 @@ export function QueryConverter() {
       if (response.success) {
         setSpannerConnected(true);
         setShowSpannerDialog(false);
-        // Assuming we have a setSpannerSessionId in store (we added it)
-        // We need to destructure it from useStore first if not already done
-        // @ts-ignore - we know it exists but maybe interface update hasn't propagated to this file's TS check in agent mind
-        useStore.getState().setSpannerSessionId(response.session_id || null);
+        setSpannerSessionId(response.session_id || null);
         addMessage({
           id: Date.now().toString(),
           role: 'agent',
@@ -93,6 +105,125 @@ export function QueryConverter() {
       setSpannerConnectionError(error.message || 'Failed to connect to Spanner database.');
     } finally {
       setIsConnectingSpanner(false);
+    }
+  };
+
+  const [isValidating, setIsValidating] = useState(false);
+
+  const handleValidateQuery = async () => {
+    if (!queryOutputCode.trim() || !spannerSessionId) return;
+
+    setIsValidating(true);
+    try {
+      const result = await api.validateSpannerQuery(spannerSessionId, queryOutputCode);
+
+      // Format result for display in chat
+      let content = "✅ **Validation Successful**\n\nQuery executed successfully on Spanner.";
+      if (result.rows && Array.isArray(result.rows)) {
+        content += `\n\n**Rows Returned**: ${result.rows.length}\n`;
+        content += "```json\n" + JSON.stringify(result.rows.slice(0, 5), null, 2) + "\n```";
+        if (result.rows.length > 5) content += "\n*(Showing first 5 rows)*";
+      } else {
+        content += "\n\nNo rows returned (or result format unknown).";
+        content += "\n```json\n" + JSON.stringify(result, null, 2) + "\n```";
+      }
+
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: content,
+        isReport: true
+      });
+
+    } catch (error) {
+      console.error("Validation error:", error);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: `❌ **Validation Failed**\n\nError executing query:\n> ${error instanceof Error ? error.message : "Unknown error"}`,
+        isReport: true
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleConvertQuery = async () => {
+    if (!sourceConnected || !spannerConnected || !sourceSessionId || !spannerSessionId) {
+      addMessage({
+        id: Date.now().toString(),
+        role: 'agent',
+        content: "Please connect both Source and Spanner databases first.",
+        isHelpful: false
+      });
+      return;
+    }
+
+    setIsConverting(true);
+
+    // Add User Message
+    addMessage({
+      id: Date.now().toString(),
+      role: 'user',
+      content: "Convert this query to Spanner SQL."
+    });
+
+    // Add Agent Placeholder
+    const agentMsgId = (Date.now() + 1).toString();
+    addMessage({
+      id: agentMsgId,
+      role: 'agent',
+      content: "Analyzing query...",
+      thoughts: "Starting query analysis..."
+    });
+
+    try {
+      await api.convertQueryAuto(
+        querySourceCode,
+        sourceSessionId,
+        spannerSessionId,
+        (chunk) => {
+          if (chunk.type === 'thought') {
+            useStore.setState(state => ({
+              messages: state.messages.map(m =>
+                m.id === agentMsgId
+                  ? { ...m, thoughts: (m.thoughts || "") + chunk.content }
+                  : m
+              )
+            }));
+          } else if (chunk.type === 'log') {
+            // For logs, we can append to thoughts or just ignore/console
+            // SchemaConverter appends to thoughts usually or handles specially
+            useStore.setState(state => ({
+              messages: state.messages.map(m =>
+                m.id === agentMsgId
+                  ? { ...m, thoughts: (m.thoughts || "") + "\n> " + chunk.content }
+                  : m
+              )
+            }));
+          } else if (chunk.type === 'result') {
+            setQueryOutputCode(chunk.converted_ddl);
+            useStore.setState(state => ({
+              messages: state.messages.map(m =>
+                m.id === agentMsgId
+                  ? { ...m, content: chunk.report || "Here is the converted query.", isReport: true }
+                  : m
+              )
+            }));
+          }
+        }
+      );
+    } catch (error: any) {
+      console.error("Query conversion failed:", error);
+      useStore.setState(state => ({
+        messages: state.messages.map(m =>
+          m.id === agentMsgId
+            ? { ...m, content: `Error: ${error.message}` }
+            : m
+        )
+      }));
+    } finally {
+      setIsConverting(false);
     }
   };
 
@@ -181,6 +312,18 @@ export function QueryConverter() {
                     )}
                     <ChevronDown size={14} className="opacity-50" />
                   </button>
+
+                  <button
+                    onClick={handleConvertQuery}
+                    disabled={!sourceConnected || !spannerConnected || isConverting}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all duration-200 border ${sourceConnected && spannerConnected
+                      ? "bg-indigo-500 text-white border-indigo-500 hover:bg-indigo-600 shadow-[0_0_15px_rgba(99,102,241,0.5)] cursor-pointer"
+                      : "bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed opacity-50"
+                      } ${isConverting ? "animate-pulse" : ""}`}
+                  >
+                    <Play size={12} fill="currentColor" />
+                    {isConverting ? "Converting..." : "Convert"}
+                  </button>
                 </div>
               }
             />
@@ -200,6 +343,15 @@ export function QueryConverter() {
               onChange={setQueryOutputCode}
               headerActions={
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleValidateQuery}
+                    disabled={!spannerConnected || isValidating || !queryOutputCode.trim()}
+                    className="p-2 text-zinc-400 hover:text-green-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Validate Query on Spanner"
+                  >
+                    <CheckCircle size={18} className={isValidating ? "animate-pulse" : ""} />
+                  </button>
+                  <div className="h-4 w-px bg-zinc-800 mx-1" />
                   <button
                     onClick={() => setShowSpannerDialog(true)}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${spannerConnected
