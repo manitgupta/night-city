@@ -346,10 +346,15 @@ export function QueryConverter() {
                   <button
                     onClick={handleValidateQuery}
                     disabled={!spannerConnected || isValidating || !queryOutputCode.trim()}
-                    className="p-2 text-zinc-400 hover:text-green-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className={`flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-md border border-zinc-700 hover:border-zinc-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                     title="Validate Query on Spanner"
                   >
-                    <CheckCircle size={18} className={isValidating ? "animate-pulse" : ""} />
+                    {isValidating ? (
+                      <span className="w-3 h-3 border-2 border-zinc-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <CheckCircle size={12} className="text-emerald-500" />
+                    )}
+                    Validate
                   </button>
                   <div className="h-4 w-px bg-zinc-800 mx-1" />
                   <button
