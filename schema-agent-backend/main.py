@@ -29,9 +29,9 @@ REQUIRED_ENV_VARS = ["GEMINI_API_KEY", "SPANNER_PROJECT_ID", "SPANNER_INSTANCE_I
 # Import app modules AFTER loading environment variables
 # This ensures that any module-level initialization (like ADK Agent) picks up the correct env vars
 from app.agent import agent_service
-from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SourceConnectionConfig, SourceConnectionResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest
+from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest
 from app.session_store import SessionStore
-from app.query.mysql_tool import MySQLDatabaseTool
+
 from app.query.spanner_tool import SpannerDatabaseTool
 import uuid
 
@@ -153,9 +153,9 @@ async def multi_turn_convert_query_stream_v2(request: QueryConversionRequest):
 
         async def generate():
             async for chunk in agent_service.multi_turn_convert_query_stream(
-                request.source_query, 
-                request.source_session_id,
-                request.spanner_session_id
+                request.source_query,
+                request.spanner_session_id,
+                request.source_dialect
             ):
                 yield json.dumps(chunk) + "\n"
 
@@ -228,28 +228,7 @@ async def get_config():
         spanner_instance_id=os.getenv("SPANNER_INSTANCE_ID", "")
     )
 
-@app.post("/source/connect", response_model=SourceConnectionResponse)
-async def connect_source(config: SourceConnectionConfig):
-    try:
-        if config.dialect.lower() == "mysql":
-            tool = MySQLDatabaseTool(config)
-            is_connected = await tool.verify_connection()
-            if is_connected:
-                # Store config and tool in session
-                session_id = SessionStore.get_instance().create_session(config.dict())
-                SessionStore.get_instance().set_tool(session_id, tool)
-                return SourceConnectionResponse(
-                    success=True, 
-                    message="Successfully connected to source database.",
-                    session_id=session_id
-                )
-            else:
-                 return SourceConnectionResponse(success=False, message="Failed to connect to source database.")
-        else:
-             return SourceConnectionResponse(success=False, message=f"Dialect {config.dialect} not yet supported.")
-    except Exception as e:
-        logger.error(f"Source Connection Error: {e}")
-        return SourceConnectionResponse(success=False, message=f"Connection Error: {str(e)}")
+
 
 @app.post("/spanner/connect", response_model=SpannerConnectionResponse)
 async def connect_spanner(config: SpannerConnectionConfig):

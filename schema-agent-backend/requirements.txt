@@ -5,6 +5,5 @@ toolbox-core==0.5.4
 google-adk==1.20.0
 python-dotenv==1.2.1
 google-cloud-spanner==3.60.0
-sqlalchemy>=2.0
-pymysql
+
 cryptography==41.0.7

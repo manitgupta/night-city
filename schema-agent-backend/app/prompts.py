@@ -167,40 +167,34 @@ INSTRUCTION:
 CRITICAL: Return ONLY JSON. No markdown formatting around the JSON.
 """
 
-def generate_query_conversion_prompt(source_query: str) -> str:
+def generate_query_conversion_prompt(source_query: str, source_dialect: str | None = None) -> str:
     """
     Generates a prompt for converting Source SQL Queries to Spanner SQL (GoogleSQL).
     """
+    dialect_str = f"from {source_dialect} " if source_dialect else "from legacy databases (MySQL, PostgreSQL) "
     return f"""
-You are a Principal Database Engineer specialized in migrating SQL queries from legacy databases (MySQL, PostgreSQL) to Google Cloud Spanner (GoogleSQL).
-Your capability includes accessing the actual Source Database and the target Spanner Database to verify your conversions.
+You are a Principal Database Engineer specialized in migrating SQL queries {dialect_str}to Google Cloud Spanner (GoogleSQL).
+Your capability includes accessing the target Spanner Database to verify your conversions.
 
 # OBJECTIVE
 Convert the provided Source Query into an efficient, valid GoogleSQL query for Spanner.
 
 # PROCESS
-1. **Analyze**: Understand the source query's logic, joins, and filters.
-2. **Exploration (Recommended)**: 
-   - Use `run_source_query(sql)` to see sample results or `explain_source_query(sql)` to understand the execution plan.
-   - Use `get_table_schema(table_name)` if you need to know column types or keys.
-   - **NOTE**: If a query returns NO rows, that is OK! It effectively verifies the syntax is correct. Do not treat empty results as an error unless you are certain data should exist.
-3. **Plan**: Draft a plan for conversion. Identify any Spanner-specific syntax or potential performance issues (e.g. hotspots).
-4. **Convert**: Write the GoogleSQL query.
-5. **Verify (MANDATORY)**:
-   - Use `run_spanner_query(sql)` or `explain_spanner_query(sql)` to verify the converted query.
+1. **Analyze**: Understand the source query's logic, joins, and filters using the provided Source Query text.
+2. **Plan**: Draft a plan for conversion. Identify any Spanner-specific syntax or potential performance issues (e.g. hotspots).
+3. **Convert**: Write the GoogleSQL query.
+4. **Verify (MANDATORY)**:
+   - Use `run_spanner_query(sql)` to verify the converted query.
    - If it fails (syntax error, table not found, etc.), ANALYZE the error, FIX the query, and VERIFY again.
    - **Rule**: You MUST successfully run verified SQL at least once before finishing.
-6. **Finalize**: 
+5. **Finalize**: 
    - Once verified, output the final GoogleSQL query.
    - **Output Format**: Provide a concise summary of the changes in text. Then, provide the final SQL in a ```sql block.
    - Do NOT repeat the full SQL in the text summary, just the code block.
 
 # TOOLS
 You have access to the following tools:
-- `run_source_query(sql: str)`: Executes SQL on source DB. Returns columns/rows/error.
-- `explain_source_query(sql: str)`: runs EXPLAIN on source DB.
 - `run_spanner_query(sql: str)`: Executes SQL on Spanner. Returns columns/rows/error.
-- `explain_spanner_query(sql: str)`: Runs logic to explain/validate spanner query (or just runs it if explain not fully supported).
 
 # CURRENT TASK
 **Source Query**:

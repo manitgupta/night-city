@@ -36,18 +36,7 @@ class AnalyzeResponse(BaseModel):
     explanation: str
     fixed_ddl: str
 
-class SourceConnectionConfig(BaseModel):
-    dialect: str
-    host: str
-    port: str | int
-    username: str
-    password: str
-    database: str
 
-class SourceConnectionResponse(BaseModel):
-    success: bool
-    message: str
-    session_id: Optional[str] = None
 
 class SpannerConnectionConfig(BaseModel):
     project_id: str
@@ -61,8 +50,8 @@ class SpannerConnectionResponse(BaseModel):
 
 class QueryConversionRequest(BaseModel):
     source_query: str
-    source_session_id: str
     spanner_session_id: str
+    source_dialect: Optional[str] = None
 
 class SpannerQueryRequest(BaseModel):
     session_id: str

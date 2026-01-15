@@ -823,7 +823,7 @@ class SchemaAgentService:
             yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
 
 
-    async def multi_turn_convert_query_stream(self, source_query: str, source_session_id: str, spanner_session_id: str, max_retries: int = 15):
+    async def multi_turn_convert_query_stream(self, source_query: str, spanner_session_id: str, source_dialect: str | None = None, max_retries: int = 15):
         logger.info(f"Starting Query Conversion (Max Retries: {max_retries})")
         
         # Initialize logs and verified_sql tracker
@@ -832,60 +832,37 @@ class SchemaAgentService:
 
         # 1. Retrieve Tools
         store = SessionStore.get_instance()
-        logger.info(f"Retrieving tools for Session IDs - Source: {source_session_id}, Spanner: {spanner_session_id}")
-        logger.info(f"Available Tool Keys in Store: {list(store._tools.keys())}")
+        logger.info(f"Retrieving tools for Session ID - Spanner: {spanner_session_id}")
         
-        source_tool = store.get_tool(source_session_id)
         spanner_tool = store.get_tool(spanner_session_id)
         
-        if not source_tool: logger.error(f"Source Tool not found for ID: {source_session_id}")
         if not spanner_tool: logger.error(f"Spanner Tool not found for ID: {spanner_session_id}")
         
         tool_declarations = []
         
         # Define Tool Functions
-        async def run_source_query(sql: str):
-            if not source_tool: return {"error": "Source DB not connected"}
-            return await source_tool.run_query(sql)
-
-        async def explain_source_query(sql: str):
-            if not source_tool: return {"error": "Source DB not connected"}
-            return await source_tool.explain_query(sql)
-
         async def run_spanner_query(sql: str):
-            if not spanner_tool: return {"error": "Spanner DB not connected"}
-            return await spanner_tool.run_query(sql)
+            # User requested removing the connection check to ensure actual errors propagate
+            # if not spanner_tool: return {"error": "Spanner DB not connected"} 
+            
+            result = await spanner_tool.run_query(sql)
+            if "error" in result:
+                return result
+            # Only return success status, hide data to save context
+            return {"status": "success", "message": "Query executed successfully on Spanner."}
 
-        async def explain_spanner_query(sql: str):
-            if not spanner_tool: return {"error": "Spanner DB not connected"}
-            return await spanner_tool.explain_query(sql)
 
         # Declare Schema
         tool_declarations.append(types.FunctionDeclaration(
-            name="run_source_query",
-            description="Executes a SELECT query on the Source Database to view data or verify logic.",
-            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
-        ))
-        tool_declarations.append(types.FunctionDeclaration(
-            name="explain_source_query",
-            description="Runs EXPLAIN on the Source Database to understand the query plan.",
-            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
-        ))
-        tool_declarations.append(types.FunctionDeclaration(
             name="run_spanner_query",
             description="Executes a query on Spanner. Use this to VERIFY your converted query.",
-            parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
-        ))
-        tool_declarations.append(types.FunctionDeclaration(
-            name="explain_spanner_query",
-            description="Runs EXPLAIN (or executes) on Spanner to understand performance/validity.",
             parameters=types.Schema(type=types.Type.OBJECT, properties={"sql": types.Schema(type=types.Type.STRING)}, required=["sql"])
         ))
 
         tools = [types.Tool(function_declarations=tool_declarations)]
 
         # 2. Initial Prompt
-        prompt = generate_query_conversion_prompt(source_query)
+        prompt = generate_query_conversion_prompt(source_query, source_dialect)
         yield {"type": "log", "content": "Initializing Query Agent..."}
         
         # 3. Chat History
@@ -962,8 +939,6 @@ class SchemaAgentService:
                              # Track verified SQL if no error (and message implies success/warning but not failure)
                              if isinstance(result, dict) and "error" not in result:
                                  verified_sql = sql_arg
-                         elif fc.name == "run_source_query":
-                             result = await run_source_query(sql_arg)
                         
                          # Format result (truncate if too large)
                          full_res_str = str(result)

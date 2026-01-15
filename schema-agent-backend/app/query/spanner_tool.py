@@ -67,42 +67,4 @@ class SpannerDatabaseTool(SourceDatabaseTool):
             logger.error(f"Spanner Run Query Failed: {e}")
             return {"error": str(e)}
 
-    async def explain_query(self, sql: str) -> Dict[str, Any]:
-        # Spanner supports query execution plans.
-        # We can use profile/plan mode.
-        try:
-            # For now, just execute it as a query since regular SQL might not have direct EXPLAIN syntax 
-            # effectively standardized across drivers, but we can try basic execution execution or specific hints.
-            # Actually, Spanner client has `execute_sql` with `query_mode`.
-            # We'll implement a specific explain logic if possible, or just fallback to run_query for now
-            # since the interface expects a dict.
-            # Let's try to get the query plan.
-            
-            def _explain():
-                database = self._get_database()
-                with database.snapshot() as snapshot:
-                    # QUERY_MODE_PLAN gives the plan without execution stats
-                    # QUERY_MODE_PROFILE gives plan + stats
-                    from google.cloud.spanner_v1 import Type
-                    from google.cloud.spanner_v1.types import ResultSetStats
-                    
-                    # We need to access the underlying method or use appropriate flags
-                    # The python client supports query_mode in execute_sql
-                    # But it returns a StreamedResultSet. We need to check stats.
-                    
-                    # However, strictly returning JSON might be tricky without parsing.
-                    # For simplicity in this iteration, we just run the query and return it,
-                    # or maybe just return a placeholder feature not yet fully supported.
-                    
-                    # Let's try a simple approach: Just run it.
-                    # TODO: Implement full visual query plan later.
-                    pass
-            
-            # Placeholder:
-            # return await self.run_query(f"DESCRIBE ({sql})") 
-            # actually let's just return a message
-            return {"message": "Explain not fully implemented for Spanner yet"}
 
-        except Exception as e:
-            logger.error(f"Spanner Explain Failed: {e}")
-            return {"error": str(e)}

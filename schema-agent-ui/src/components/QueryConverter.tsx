@@ -1,29 +1,31 @@
-import { useState } from "react";
-import { Search, ChevronDown, Database, Settings, Wand2, CheckCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, CheckCircle, Settings, Wand2, Database, ChevronDown } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ChatInterface } from "./ChatInterface";
 import { SchemaEditor } from "./SchemaEditor";
-import { SourceConnectionDialog } from "./SourceConnectionDialog";
 import { SpannerConnectionDialog } from "./SpannerConnectionDialog";
 import { QueryIntroductionWizard } from "./QueryIntroductionWizard";
 import { useStore } from "../store";
-import { api, SourceConnectionConfig } from "../services/api";
-import { useEffect } from "react";
+import { api } from "../services/api";
+
+const SOURCE_DIALECTS = [
+  { id: 'mysql', name: 'MySQL' },
+  { id: 'postgres', name: 'PostgreSQL' },
+  { id: 'oracle', name: 'Oracle' },
+  { id: 'sqlserver', name: 'SQL Server' },
+  { id: 'cassandra', name: 'Cassandra' }
+];
 
 export function QueryConverter() {
-  const [showSourceDialog, setShowSourceDialog] = useState(false);
   const [showSpannerDialog, setShowSpannerDialog] = useState(false);
+  const [showDialectDropdown, setShowDialectDropdown] = useState(false);
 
-  const [sourceConnected, setSourceConnected] = useState(false);
   const [spannerConnected, setSpannerConnected] = useState(false);
 
-  const [sourceConnectionError, setSourceConnectionError] = useState<string | null>(null);
   const [spannerConnectionError, setSpannerConnectionError] = useState<string | null>(null);
 
-
-
-  const [isConnectingSource, setIsConnectingSource] = useState(false);
   const [isConnectingSpanner, setIsConnectingSpanner] = useState(false);
+
 
   const [isConverting, setIsConverting] = useState(false);
 
@@ -31,15 +33,16 @@ export function QueryConverter() {
     chatContext,
     setChatContext,
     resetMessages,
-    sourceSessionId,
-    setSourceSessionId,
     spannerSessionId,
     setSpannerSessionId,
     addMessage,
     querySourceCode,
     queryOutputCode,
+    querySourceDialect,
     setQuerySourceCode,
-    setQueryOutputCode
+    setQueryOutputCode,
+    setQuerySourceDialect,
+    spannerConfig
   } = useStore();
 
   // Initialize Chat for Query Conversion
@@ -54,33 +57,7 @@ export function QueryConverter() {
     }
   }, [chatContext, setChatContext, resetMessages]);
 
-  // Mock connection handlers
-  const handleConnectSource = async (config: any) => {
-    setIsConnectingSource(true);
-    setSourceConnectionError(null);
-    try {
-      const response = await api.connectSource(config as SourceConnectionConfig);
-      if (response.success) {
-        setSourceConnected(true);
-        setShowSourceDialog(false);
-        setSourceSessionId(response.session_id || null);
-        addMessage({
-          id: Date.now().toString(),
-          role: 'agent',
-          content: `Successfully connected to source database (${config.dialect}: ${config.host})!`,
-          isHelpful: true
-        });
-      } else {
-        console.error('Connection failed:', response.message);
-        setSourceConnectionError(response.message);
-      }
-    } catch (error: any) {
-      console.error('Source connection error:', error);
-      setSourceConnectionError(error.message || 'Failed to connect to source database.');
-    } finally {
-      setIsConnectingSource(false);
-    }
-  };
+
 
   const handleConnectSpanner = async (config: any) => {
     setIsConnectingSpanner(true);
@@ -108,6 +85,17 @@ export function QueryConverter() {
       setIsConnectingSpanner(false);
     }
   };
+
+  // Auto-connect to Spanner if config exists and not connected
+  useEffect(() => {
+    if (spannerConfig && !spannerConnected && !isConnectingSpanner && !spannerSessionId && !spannerConnectionError) {
+      handleConnectSpanner({
+        project_id: spannerConfig.projectId,
+        instance_id: spannerConfig.instanceId,
+        database_id: spannerConfig.databaseId
+      });
+    }
+  }, [spannerConfig, spannerConnected, spannerSessionId]);
 
   const [isValidating, setIsValidating] = useState(false);
 
@@ -150,11 +138,11 @@ export function QueryConverter() {
   };
 
   const handleConvertQuery = async () => {
-    if (!sourceConnected || !spannerConnected || !sourceSessionId || !spannerSessionId) {
+    if (!spannerConnected || !spannerSessionId) {
       addMessage({
         id: Date.now().toString(),
         role: 'agent',
-        content: "Please connect both Source and Spanner databases first.",
+        content: "Please connect Spanner database first.",
         isHelpful: false
       });
       return;
@@ -181,8 +169,8 @@ export function QueryConverter() {
     try {
       await api.convertQueryAuto(
         querySourceCode,
-        sourceSessionId,
         spannerSessionId,
+        querySourceDialect,
         (chunk) => {
           if (chunk.type === 'thought') {
             useStore.setState(state => ({
@@ -238,16 +226,7 @@ export function QueryConverter() {
 
   return (
     <div className="flex flex-col h-screen w-full bg-zinc-950 text-zinc-200 font-sans selection:bg-indigo-500/30 relative">
-      <SourceConnectionDialog
-        isOpen={showSourceDialog}
-        onClose={() => {
-          setShowSourceDialog(false);
-          setSourceConnectionError(null);
-        }}
-        onConnect={handleConnectSource}
-        isConnecting={isConnectingSource}
-        error={sourceConnectionError}
-      />
+
       <SpannerConnectionDialog
         isOpen={showSpannerDialog}
         onClose={() => {
@@ -294,33 +273,50 @@ export function QueryConverter() {
               onChange={setQuerySourceCode}
               headerActions={
                 <div className="flex items-center gap-2">
-                  <button
-                    id="query-source-trigger"
-                    onClick={() => setShowSourceDialog(true)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${sourceConnected
-                      ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20"
-                      : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-200"
-                      }`}
-                  >
-                    {sourceConnected ? (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDialectDropdown(!showDialectDropdown)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-200 transition-all min-w-[120px] justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Database size={14} className="text-indigo-400" />
+                        {SOURCE_DIALECTS.find(d => d.id === querySourceDialect)?.name || "Select Dialect"}
+                      </span>
+                      <ChevronDown size={14} className={`transition-transform duration-200 ${showDialectDropdown ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {showDialectDropdown && (
                       <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                        Source Active
-                      </>
-                    ) : (
-                      <>
-                        <Database size={14} />
-                        Select Source
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowDialectDropdown(false)}
+                        />
+                        <div className="absolute top-full left-0 mt-1 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 py-1 max-h-60 overflow-y-auto">
+                          {SOURCE_DIALECTS.map((dialect) => (
+                            <button
+                              key={dialect.id}
+                              onClick={() => {
+                                setQuerySourceDialect(dialect.id);
+                                setShowDialectDropdown(false);
+                              }}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${querySourceDialect === dialect.id ? "text-indigo-400 bg-indigo-500/10" : "text-zinc-400"
+                                }`}
+                            >
+                              {dialect.name}
+                              {querySourceDialect === dialect.id && <CheckCircle size={12} />}
+                            </button>
+                          ))}
+                        </div>
                       </>
                     )}
-                    <ChevronDown size={14} className="opacity-50" />
-                  </button>
+                  </div>
+
 
                   <button
                     id="query-convert-button"
                     onClick={handleConvertQuery}
-                    disabled={!sourceConnected || !spannerConnected || isConverting}
-                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${sourceConnected && spannerConnected && !isConverting
+                    disabled={!spannerConnected || isConverting}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all duration-300 ml-2 ${spannerConnected && !isConverting
                       ? "bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 active:scale-95 cursor-pointer ring-1 ring-white/10"
                       : "bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50 ring-1 ring-white/5"
                       } ${isConverting ? "opacity-80 cursor-wait" : ""}`}

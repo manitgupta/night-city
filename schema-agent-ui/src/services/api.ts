@@ -147,16 +147,16 @@ export const api = {
 
     async convertQueryAuto(
         sourceQuery: string,
-        sourceSessionId: string,
         spannerSessionId: string,
+        sourceDialect: string | null = null,
         onChunk: (chunk: any) => void
     ): Promise<ConversionResponse> {
         return this._streamRequest(
             `${API_BASE_URL}/multi_turn_convert_query_stream_v2`,
             {
                 source_query: sourceQuery,
-                source_session_id: sourceSessionId,
-                spanner_session_id: spannerSessionId
+                spanner_session_id: spannerSessionId,
+                source_dialect: sourceDialect
             },
             onChunk
         );

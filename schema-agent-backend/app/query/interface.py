@@ -25,9 +25,4 @@ class SourceDatabaseTool(ABC):
         """
         pass
     
-    @abstractmethod
-    async def explain_query(self, sql: str) -> Dict[str, Any]:
-        """
-        Executes an EXPLAIN query and returns the explanation.
-        """
-        pass
+

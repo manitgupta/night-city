@@ -54,10 +54,7 @@ export const QueryIntroductionWizard: React.FC<IntroductionWizardProps> = ({ onC
       content: 'Paste your legacy SQL query here. The agent supports complex joins, subqueries, and non-standard functions.',
       placement: 'right',
     },
-    {
-      target: '#query-source-trigger',
-      content: 'Connect to your source database here to allow the agent to inspect table statistics and schema when optimizing your query.',
-    },
+
     {
       target: '#query-spanner-trigger',
       content: 'Connect to your Spanner instance here. This is required for validation and running the converted queries.',

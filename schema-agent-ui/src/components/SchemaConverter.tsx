@@ -3,7 +3,7 @@ import { SchemaEditor } from "./SchemaEditor";
 import { ChatInterface } from "./ChatInterface";
 import { MigrateDialog } from "./MigrateDialog";
 import { useState, useEffect } from "react";
-import { Database, Lock, Unlock, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, Eye, ThumbsUp, ThumbsDown, Rocket, ArrowLeft } from "lucide-react";
+import { Database, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Microscope, Eye, ThumbsUp, ThumbsDown, Rocket, ArrowLeft } from "lucide-react";
 import { useStore } from "../store";
 import { api, AnalyzeResponse } from "../services/api";
 import { IntroductionWizard } from "./IntroductionWizard";
@@ -22,7 +22,6 @@ interface SchemaConverterProps {
 }
 
 export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterProps) {
-  const [isSourceLocked, setIsSourceLocked] = useState(false); // Default to unlocked so user can paste
   const [isConverting, setIsConverting] = useState(false);
 
   const [showDialectDropdown, setShowDialectDropdown] = useState(false);
@@ -38,7 +37,7 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
 
-  const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages, setSpannerConfig } = useStore();
+  const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages, setSpannerConfig, setQuerySourceDialect } = useStore();
 
   // Initialize Chat for Schema Conversion
   useEffect(() => {
@@ -194,7 +193,6 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
 
     setIsConverting(true);
     setAgentTyping(true);
-    setIsSourceLocked(true); // Auto-lock on convert
 
     // Add a placeholder message for the agent's thought process
     const thinkingMsgId = Date.now().toString();
@@ -313,7 +311,12 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
         onMigrate={handleMigrate}
         isMigrating={isMigrating}
         migrationResult={migrationResult}
-        onNavigateToQuery={onNavigateToQuery}
+        onNavigateToQuery={() => {
+          if (sourceDialect) {
+            setQuerySourceDialect(sourceDialect);
+          }
+          onNavigateToQuery();
+        }}
       />
       
       {validationResult && showValidationModal && !reviewState.isActive && (
@@ -450,9 +453,8 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
           {/* Left Panel: Source */}
           <Panel defaultSize={30} minSize={20} className="flex flex-col">
             <SchemaEditor
-              title={sourceDialect ? `Source Schema(${SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name})` : "Source Schema"}
+              title="Source Schema"
               type="source"
-              readOnly={isSourceLocked}
               showHint={true}
               value={sourceCode}
               onChange={setSourceCode} 
@@ -463,12 +465,12 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
                     <button
                       onClick={() => setShowDialectDropdown(!showDialectDropdown)}
                       id="dialect-dropdown"
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 border ${sourceDialect
-                          ? "bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 hover:border-zinc-600"
-                          : "bg-indigo-500/10 border-indigo-500/50 text-indigo-400 hover:bg-indigo-500/20 animate-pulse shadow-[0_0_10px_rgba(99,102,241,0.1)]"
-                        }`}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:border-zinc-600 hover:text-zinc-200 transition-all min-w-[120px] justify-between"
                     >
-                      <span>{sourceDialect ? SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name : "Select Dialect"}</span>
+                      <span className="flex items-center gap-2">
+                        <Database size={14} className="text-indigo-400" />
+                        {SOURCE_DIALECTS.find(d => d.id === sourceDialect)?.name || "Select Dialect"}
+                      </span>
                       <ChevronDown size={14} className={`transition-transform duration-200 ${showDialectDropdown ? "rotate-180" : ""}`} />
                     </button>
 
@@ -499,19 +501,6 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
                       </>
                     )}
                   </div>
-
-                  <div className="w-px h-4 bg-zinc-800 mx-2" />
-
-                  <button
-                    onClick={() => setIsSourceLocked(!isSourceLocked)}
-                    className={`flex items-center justify-center w-7 h-7 rounded-md transition-all duration-200 ${isSourceLocked 
-                        ? "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800" 
-                        : "text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 hover:shadow-[0_0_10px_rgba(99,102,241,0.15)]"
-                      }`}
-                    title={isSourceLocked ? "Unlock to edit" : "Lock to prevent edits"}
-                  >
-                    {isSourceLocked ? <Lock size={14} /> : <Unlock size={14} />}
-                  </button>
 
                   <div className="w-px h-4 bg-zinc-800 mx-1" />
 

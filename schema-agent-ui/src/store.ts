@@ -27,9 +27,7 @@ interface AppState {
   messages: Message[];
   isAgentTyping: boolean;
 
-  // Source Connection State
-  sourceSessionId: string | null;
-  setSourceSessionId: (id: string | null) => void;
+  // Spanner Connection State
 
   spannerSessionId: string | null;
   setSpannerSessionId: (id: string | null) => void;
@@ -37,8 +35,10 @@ interface AppState {
   // Query Conversion State
   querySourceCode: string;
   queryOutputCode: string;
+  querySourceDialect: string | null;
   setQuerySourceCode: (code: string) => void;
   setQueryOutputCode: (code: string) => void;
+  setQuerySourceDialect: (dialect: string | null) => void;
 
   setSourceCode: (code: string) => void;
   setOutputCode: (code: string) => void;
@@ -74,17 +74,15 @@ export const useStore = create<AppState>((set) => ({
   // Query Conversion State
   querySourceCode: "",
   queryOutputCode: "",
+  querySourceDialect: null,
   setQuerySourceCode: (code) => set({ querySourceCode: code }),
   setQueryOutputCode: (code) => set({ queryOutputCode: code }),
+  setQuerySourceDialect: (dialect) => set({ querySourceDialect: dialect }),
 
   selection: null,
   messages: [], // Initialized by components based on context
 
   isAgentTyping: false,
-  sourceSessionId: null,
-
-  setSourceSessionId: (id) => set({ sourceSessionId: id }),
-
   spannerSessionId: null,
   setSpannerSessionId: (id: string | null) => set({ spannerSessionId: id }),
 
