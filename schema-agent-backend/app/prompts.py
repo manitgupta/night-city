@@ -173,7 +173,7 @@ def generate_query_conversion_prompt(source_query: str, source_dialect: str | No
     """
     dialect_str = f"from {source_dialect} " if source_dialect else "from legacy databases (MySQL, PostgreSQL) "
     return f"""
-You are a Principal Database Engineer specialized in migrating SQL queries {dialect_str}to Google Cloud Spanner (GoogleSQL).
+You are a Principal Database Engineer specialized in migrating SQL queries {dialect_str} to Google Cloud Spanner (GoogleSQL).
 Your capability includes accessing the target Spanner Database to verify your conversions.
 
 # OBJECTIVE
@@ -188,7 +188,7 @@ Convert the provided Source Query into an efficient, valid GoogleSQL query for S
    - If it fails (syntax error, table not found, etc.), ANALYZE the error, FIX the query, and VERIFY again.
    - **Rule**: You MUST successfully run verified SQL at least once before finishing.
 5. **Finalize**: 
-   - Once verified, output the final GoogleSQL query.
+   - Once verified, output the final GoogleSQL query. Always output the same query that was verified.
    - **Output Format**: Provide a concise summary of the changes in text. Then, provide the final SQL in a ```sql block.
    - Do NOT repeat the full SQL in the text summary, just the code block.
 
