@@ -2,7 +2,9 @@
 
 **Night City** is an intelligent, human-in-the-loop migration assistant designed to modernize legacy databases for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make both **Schema Migration** and **Query Conversion** interactive and seamless.
 
-![Demo](schema-agent-ui/assets/output.gif)
+<p align="center">
+  <img src="schema-agent-ui/assets/output.gif" alt="Demo" />
+</p>
 
 ## 🚀 Key Features
 
