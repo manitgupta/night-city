@@ -11,13 +11,13 @@ export function ConfidenceBadge({ score, explanation, isLoading = false }: Confi
 
   const getBarColor = (s: number) => {
     if (s >= 90) return 'bg-emerald-500';
-    if (s >= 70) return 'bg-yellow-500';
+    if (s >= 50) return 'bg-yellow-500';
     return 'bg-red-500';
   };
 
   const getIcon = (s: number) => {
     if (s >= 90) return <CheckCircle size={14} className="text-emerald-400" />;
-    if (s >= 70) return <HelpCircle size={14} className="text-yellow-400" />;
+    if (s >= 50) return <HelpCircle size={14} className="text-yellow-400" />;
     return <AlertTriangle size={14} className="text-red-400" />;
   };
 
