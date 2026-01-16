@@ -1,0 +1,6 @@
+{
+    "source_code": "SELECT u.name, GROUP_CONCAT(o.id) as orders FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
+    "target_code": "SELECT u.name, ARRAY_TO_STRING(ARRAY_AGG(CAST(o.id AS STRING)), ',') as orders FROM users u JOIN orders o ON u.id = o.user_id GROUP BY u.name",
+    "conversion_report": "Converted GROUP_CONCAT to ARRAY_TO_STRING(ARRAY_AGG(...)).",
+    "type": "query"
+}

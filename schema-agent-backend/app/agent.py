@@ -806,21 +806,53 @@ class SchemaAgentService:
                             escape_next = True
                         elif char == '"':
                             in_explanation_value = False
+                            # Flush buffer
+                            if output_buffer:
+                                yield {"type": "thought", "content": output_buffer}
+                                output_buffer = ""
                             break
                         else:
                             output_buffer += char
-                        
-                        # Check buffer
-                        if len(output_buffer) >= BUFFER_SIZE or output_buffer.endswith("\n"):
-                            yield {"type": "thought", "content": output_buffer}
-                            output_buffer = ""
-            
-            # Yield remaining buffer
-            if output_buffer:
-                yield {"type": "thought", "content": output_buffer}
+                            if len(output_buffer) >= BUFFER_SIZE or output_buffer.endswith("\n"):
+                                yield {"type": "thought", "content": output_buffer}
+                                output_buffer = ""
+                                
         except Exception as e:
-            logger.error(f"Gemini API call failed in analyze_fix_stream: {str(e)}", exc_info=True)
-            yield {"type": "log", "content": f"Error during analysis: {str(e)}"}
+            logger.error(f"Error in analyze_fix_stream: {e}", exc_info=True)
+            yield {"type": "log", "content": f"Analysis Error: {str(e)}"}
+
+    async def calculate_confidence_score(self, source_code: str, target_code: str, conversion_report: str, type: str) -> Dict[str, Any]:
+        """
+        Calculates a confidence score (0-100) for the conversion using Gemini.
+        """
+        from typing import Dict, Any
+        from app.prompts import generate_schema_confidence_prompt, generate_query_confidence_prompt
+        
+        if type == "schema":
+            prompt = generate_schema_confidence_prompt(source_code, target_code, conversion_report)
+        else:
+            prompt = generate_query_confidence_prompt(source_code, target_code, conversion_report)
+
+        try:
+             # Sync call for simplicity as this is a quick single turn
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.1
+                )
+            )
+            
+            import json
+            if response.text:
+                return json.loads(response.text)
+            else:
+                 return {"score": 0, "explanation": "Failed to generate score."}
+
+        except Exception as e:
+            logger.error(f"Confidence score calculation failed: {e}")
+            return {"score": 0, "explanation": f"Error calculating score: {str(e)}"}
 
 
     async def multi_turn_convert_query_stream(self, source_query: str, spanner_session_id: str, source_dialect: str | None = None, max_retries: int = 15):

@@ -205,3 +205,96 @@ You have access to the following tools:
 Begin by analyzing the query.
 """
 
+
+def generate_schema_confidence_prompt(source_code: str, target_code: str, conversion_report: str) -> str:
+    """
+    Generates a prompt for evaluating Schema Conversion Confidence.
+    Focuses on Syntactic Equivalence and structure preservation.
+    """
+    return f"""
+    You are a strict Code Reviewer evaluating the "Syntactic Equivalence" of a database conversion to Spanner.
+    Your goal is to measure how faithful the converted code is to the original source structure, logic, and syntax.
+    
+    IGNORE performance benefits or Spanner best practices. Focus ONLY on how much the code had to change.
+    
+    Inputs:
+    1. Source Code (Schema):
+    ```sql
+    {source_code}
+    ```
+
+    2. Converted Spanner Code:
+    ```sql
+    {target_code}
+    ```
+
+    3. Conversion Report:
+    {conversion_report}
+
+    Scoring Rules (0-100):
+    - 100: Syntactically identical (accounting for basic dialect differences like `VARCHAR` -> `STRING`).
+    - High Score (90-99): Direct 1:1 mapping of types and constraints.
+    
+    Penalties (Apply cumulatively):
+    - MODERATE Penalty (-5 to -10): Changing specific mechanisms to match Spanner.
+      * Example: `AUTO_INCREMENT` -> `SEQUENCE` / `BIT_REVERSED_POSITIVE`.
+    - HIGH Penalty (-10 to -20): Structural changes or changing the relationship model.
+      * Example: Changing `FOREIGN KEY` to `INTERLEAVE IN PARENT` (even if it's better for Spanner, it is NOT syntactically equivalent to the original).
+    - SEVERE Penalty (-30-50): Unsupported functions dropped or replaced with different logic.
+    
+    The score should reflect "How many edits were required to make this work?".
+    - Fewer edits = Higher Score.
+    - More edits (structure, types, mechanisms) = Lower Score.
+    
+    Output JSON:
+    {{
+        "score": <number 0-100>,
+        "explanation": "<short, concise explanation focusing on what changed>"
+    }}
+    """
+
+def generate_query_confidence_prompt(source_code: str, target_code: str, conversion_report: str) -> str:
+    """
+    Generates a prompt for evaluating Query Conversion Confidence.
+    Focuses on Syntactic Equivalence and functional mapping.
+    """
+    return f"""
+    You are a strict Code Reviewer evaluating the "Syntactic Equivalence" of a database conversion to Spanner.
+    Your goal is to measure how faithful the converted code is to the original source structure, logic, and syntax.
+
+    Inputs:
+    1. Source Code (Query):
+    ```sql
+    {source_code}
+    ```
+
+    2. Converted Spanner Code:
+    ```sql
+    {target_code}
+    ```
+
+    3. Conversion Report:
+    {conversion_report}
+
+    Scoring Rules (0-100):
+    - 100 (Identical): Query structure is preserved. Only basic syntax/quoting differences (e.g., `"col"` vs ``` `col` ```).
+    - High Score (90-99): Direct mapping of functions and types.
+       - Example: `NOW()` -> `CURRENT_TIMESTAMP()`, strict type casting (`CAST(id AS INT64)`).
+
+    Penalties (Apply cumulatively):
+    - MODERATE Penalty (-5 to -10): Functional rewrites to match Spanner functions.
+       - Example 1: `ILIKE` -> `LOWER(a) = LOWER(b)`
+       - Example 2: `DATE_ADD(d, INTERVAL 1 DAY)` -> `DATE_ADD(d, INTERVAL 1 DAY)` (Function signature tweaks).
+    - HIGH Penalty (-10 to -20): Structural changes or complex workarounds.
+       - Example 1: `GROUP_CONCAT` -> `ARRAY_TO_STRING(ARRAY_AGG(...))` (Structure changed from scalar agg to array ops).
+       - Example 2: Adding `UNNEST()` to handle joins or array expansions that were implicit in Source.
+       - Example 3: Adding explicit `FORCE_INDEX` hints not present in source.
+    - SEVERE Penalty (-30+): Logic gaps or unsupported features.
+       - Example: Emulating unsupported UDFs or Window Functions with partial logic.
+    
+    Output JSON:
+    {{
+        "score": <number 0-100>,
+        "explanation": "<short, concise explanation focusing on what changed>"
+    }}
+    """

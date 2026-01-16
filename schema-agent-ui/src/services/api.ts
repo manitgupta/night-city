@@ -297,6 +297,16 @@ export const api = {
         return response.json();
     },
 
+    async getConfidenceScore(source_code: string, target_code: string, conversion_report: string, type: 'schema' | 'query') {
+        const response = await fetch(`${API_BASE_URL}/confidence`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source_code, target_code, conversion_report, type }),
+        });
+        if (!response.ok) throw new Error("Failed to get confidence score");
+        return response.json();
+    },
+
     async migrateSchema(projectId: string, instanceId: string, databaseId: string, ddl: string): Promise<MigrateResponse> {
         const response = await fetch(`${API_BASE_URL}/migrate`, {
             method: "POST",

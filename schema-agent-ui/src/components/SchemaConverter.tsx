@@ -7,6 +7,7 @@ import { Database, Wand2, ChevronDown, CheckCircle, XCircle, AlertCircle, Micros
 import { useStore } from "../store";
 import { api, AnalyzeResponse } from "../services/api";
 import { IntroductionWizard } from "./IntroductionWizard";
+import { ConfidenceBadge } from "./ConfidenceBadge";
 
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
@@ -36,6 +37,8 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
   const [migrationResult, setMigrationResult] = useState<{ success: boolean; database_uri: string; message: string; } | null>(null);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [showValidateHighlight, setShowValidateHighlight] = useState(false);
+  const [confidenceScore, setConfidenceScore] = useState<{ score: number; explanation: string } | null>(null);
+  const [isCalculatingScore, setIsCalculatingScore] = useState(false);
 
   const { setSourceCode, setOutputCode, addMessage, setAgentTyping, sourceCode, outputCode, reviewState, setReviewState, chatContext, setChatContext, resetMessages, setSpannerConfig, setQuerySourceDialect } = useStore();
 
@@ -250,6 +253,16 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
             : m
         )
       }));
+
+      // Calculate Confidence Score
+      setIsCalculatingScore(true);
+      setConfidenceScore(null); // Reset previous score
+
+      // Fire and forget (don't await) to allow UI to update immediately
+      api.getConfidenceScore(sourceCode, result.converted_ddl, result.report || "", 'schema')
+        .then(scoreResult => setConfidenceScore(scoreResult))
+        .catch(e => console.error("Failed to get confidence score", e))
+        .finally(() => setIsCalculatingScore(false));
 
       // Add helpful follow-up message
       setTimeout(() => {
@@ -591,6 +604,16 @@ export function SchemaConverter({ onBack, onNavigateToQuery }: SchemaConverterPr
                     )}
                     Validate
                   </button>
+
+                      {(confidenceScore || isCalculatingScore) && (
+                        <div className="ml-2 animate-in fade-in slide-in-from-right-2">
+                          <ConfidenceBadge
+                            score={confidenceScore?.score || 0}
+                            explanation={confidenceScore?.explanation || "Calculating..."}
+                            isLoading={isCalculatingScore}
+                          />
+                        </div>
+                      )}
 
                       <div className="w-px h-4 bg-zinc-800 mx-2" />
 

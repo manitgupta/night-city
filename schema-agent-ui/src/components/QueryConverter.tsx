@@ -7,6 +7,7 @@ import { SpannerConnectionDialog } from "./SpannerConnectionDialog";
 import { QueryIntroductionWizard } from "./QueryIntroductionWizard";
 import { useStore } from "../store";
 import { api } from "../services/api";
+import { ConfidenceBadge } from "./ConfidenceBadge";
 
 const SOURCE_DIALECTS = [
   { id: 'mysql', name: 'MySQL' },
@@ -28,6 +29,8 @@ export function QueryConverter() {
 
 
   const [isConverting, setIsConverting] = useState(false);
+  const [confidenceScore, setConfidenceScore] = useState<{ score: number; explanation: string } | null>(null);
+  const [isCalculatingScore, setIsCalculatingScore] = useState(false);
 
   const {
     chatContext,
@@ -199,6 +202,17 @@ export function QueryConverter() {
                   : m
               )
             }));
+
+            // Calculate Confidence Score
+            // We need to do this asynchronously and not block the stream callback if possible, 
+            // but for simplicity we can just trigger it here.
+            // Note: chunk.converted_ddl is available.
+            setIsCalculatingScore(true);
+            setConfidenceScore(null);
+            api.getConfidenceScore(querySourceCode, chunk.converted_ddl, chunk.report || "", 'query')
+              .then(scoreResult => setConfidenceScore(scoreResult))
+              .catch(e => console.error("Failed to get confidence score", e))
+              .finally(() => setIsCalculatingScore(false));
           }
         }
       );
@@ -357,6 +371,17 @@ export function QueryConverter() {
                     )}
                     Validate
                   </button>
+
+                  {(confidenceScore || isCalculatingScore) && (
+                    <div className="ml-2 animate-in fade-in slide-in-from-right-2">
+                      <ConfidenceBadge
+                        score={confidenceScore?.score || 0}
+                        explanation={confidenceScore?.explanation || "Calculating..."}
+                        isLoading={isCalculatingScore}
+                      />
+                    </div>
+                  )}
+
                   <div className="h-4 w-px bg-zinc-800 mx-1" />
                   <button
                     id="query-spanner-trigger"

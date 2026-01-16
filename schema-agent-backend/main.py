@@ -206,6 +206,29 @@ async def analyze_error(request: AnalyzeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class ConfidenceRequest(BaseModel):
+    source_code: str
+    target_code: str
+    conversion_report: str
+    type: str # 'schema' or 'query'
+
+class ConfidenceResponse(BaseModel):
+    score: int
+    explanation: str
+
+@app.post("/confidence", response_model=ConfidenceResponse)
+async def get_confidence_score(request: ConfidenceRequest):
+    try:
+        result = await agent_service.calculate_confidence_score(
+            request.source_code,
+            request.target_code,
+            request.conversion_report,
+            request.type
+        )
+        return ConfidenceResponse(**result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/migrate", response_model=MigrateResponse)
 async def migrate_database(request: MigrateRequest):
     try:

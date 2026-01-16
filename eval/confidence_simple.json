@@ -1,0 +1,6 @@
+{
+  "source_code": "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(255));",
+  "target_code": "CREATE TABLE users (id INT64 NOT NULL, name STRING(255)) PRIMARY KEY(id);",
+  "conversion_report": "Converted INT to INT64 and VARCHAR to STRING. Preserved Primary Key.",
+  "type": "schema"
+}
