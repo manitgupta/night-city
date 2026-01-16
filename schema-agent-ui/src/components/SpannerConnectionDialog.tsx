@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Cloud, CheckCircle, Database, AlertCircle } from "lucide-react";
+import { X, Cloud, CheckCircle, Database, AlertCircle, Lock, Unlock } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store";
 
 interface SpannerConnectionDialogProps {
@@ -17,6 +17,32 @@ export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecti
     instanceId: spannerConfig?.instanceId || '',
     databaseId: spannerConfig?.databaseId || ''
   });
+  const [isProjectLocked, setIsProjectLocked] = useState(true);
+  const [isInstanceLocked, setIsInstanceLocked] = useState(true);
+
+  // Fetch defaults when dialog opens if not already set in store
+  useEffect(() => {
+    if (isOpen) {
+      // If we already have values in the store (e.g. from previous migration), stick with them (or maybe we should still fetch defaults if empty?)
+      // The user likely wants the defaults if they haven't manually overridden them or if the store is empty.
+      // But if `spannerConfig` exists, it might be what they want. 
+      // Let's safe-guard: if fields are empty, try to fill them.
+
+      const shouldFetch = !config.projectId || !config.instanceId;
+
+      if (shouldFetch) {
+        import('../services/api').then(module => {
+          module.api.getConfig().then(defaults => {
+            setConfig(prev => ({
+              ...prev,
+              projectId: prev.projectId || defaults.spanner_project_id,
+              instanceId: prev.instanceId || defaults.spanner_instance_id
+            }));
+          }).catch(err => console.error("Failed to load config defaults", err));
+        });
+      }
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -39,29 +65,51 @@ export function SpannerConnectionDialog({ isOpen, onClose, onConnect, isConnecti
         <div className="p-6 space-y-4">
           
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">GCP Project ID</label>
-            <input
-              type="text"
-              placeholder="my-gcp-project"
-              value={config.projectId}
-              onChange={(e) => setConfig({ ...config, projectId: e.target.value })}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-zinc-700"
-            />
+            <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">GCP Project ID</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="my-gcp-project"
+                value={config.projectId}
+                onChange={(e) => setConfig({ ...config, projectId: e.target.value })}
+                className={`w-full bg-zinc-950 border rounded-lg pl-3 pr-9 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-zinc-700 ${isProjectLocked ? "border-zinc-800 opacity-60 cursor-not-allowed" : "border-zinc-700 focus:border-indigo-500"}`}
+                disabled={isProjectLocked}
+              />
+              <button
+                type="button"
+                onClick={() => setIsProjectLocked(!isProjectLocked)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                disabled={isConnecting}
+              >
+                {isProjectLocked ? <Lock size={14} /> : <Unlock size={14} />}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-zinc-400">Spanner Instance ID</label>
-            <input
-              type="text"
-              placeholder="my-spanner-instance"
-              value={config.instanceId}
-              onChange={(e) => setConfig({ ...config, instanceId: e.target.value })}
-              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-zinc-700"
-            />
+            <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Spanner Instance ID</label>
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="my-spanner-instance"
+                value={config.instanceId}
+                onChange={(e) => setConfig({ ...config, instanceId: e.target.value })}
+                className={`w-full bg-zinc-950 border rounded-lg pl-3 pr-9 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-zinc-700 ${isInstanceLocked ? "border-zinc-800 opacity-60 cursor-not-allowed" : "border-zinc-700 focus:border-indigo-500"}`}
+                disabled={isInstanceLocked}
+              />
+              <button
+                type="button"
+                onClick={() => setIsInstanceLocked(!isInstanceLocked)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors"
+                disabled={isConnecting}
+              >
+                {isInstanceLocked ? <Lock size={14} /> : <Unlock size={14} />}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-1.5">
-             <label className="text-xs font-medium text-zinc-400">Database ID</label>
+            <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Database ID</label>
              <div className="relative">
                 <Database size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
                 <input
