@@ -1,21 +1,28 @@
-# <img src="schema-agent-ui/assets/logo.png" width="48" height="48" style="vertical-align: middle;" /> Night City: Agentic Spanner Schema Converter
+# <img src="schema-agent-ui/assets/logo.png" width="48" height="48" style="vertical-align: middle;" /> Night City: Agentic Spanner Migration Assistant
 
-**Night City** is an intelligent, human-in-the-loop schema conversion tool designed to modernize SQL schemas for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make schema migration interactive and seamless.
+**Night City** is an intelligent, human-in-the-loop migration assistant designed to modernize legacy databases for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make both **Schema Migration** and **Query Conversion** interactive and seamless.
 
-![Demo](schema-agent-ui/assets/night-city-demo.gif)
+![Demo](schema-agent-ui/assets/night-city.gif)
 
 ## 🚀 Key Features
 
-- **Agentic Conversion**: An AI agent that doesn't just translate, but *understands* your schema.
-- **Auto-Mode Multi-Turn Conversion**: A powerful **self-correction loop** where the agent iteratively validates the schema against a real Spanner instance. If validation fails, it automatically analyzes the error, repairs the schema, and verifies it again until it's perfect.
-- **IDE-like Experience**: Dual-pane editors allow you to review source and output, with an integrated **Diff View** for reviewing agent-proposed fixes.
-- **Analyze & Fix Loop**: LLMs work best on feedback (from both humans and compilers!). Validate -> Repair flow allows you to review and accept/reject agent-proposed fixes.
-- **Direct Migration**: One-click deployment of your converted schema to a new Cloud Spanner database directly from the UI.
-- **Agent Chat & Schema Refinement**: Ask questions or request schema changes (e.g., "Rename `id` to `user_id`"). The agent proposes changes via a "Review" button, letting you visualize diffs before accepting.
+### 1. Dual-Mode Migration
+Night City provides two distinct, specialized workflows:
+- **Schema Conversion**: Migrate DDL (Tables, Indexes, Constraints) from legacy databases to Spanner.
+- **Query Conversion**: Translate complex SQL queries to optimized Spanner GoogleSQL.
+
+### 2. Agentic Intelligence
+- **Smart Validation Loop**: The agent doesn't just guess. It generates code, *automatically verifies* it against a real Spanner instance, and self-corrects errors in a multi-turn loop until the result is valid.
+- **Context-Aware Chat**: Ask specific questions about your code (e.g., "Why did you choose `INT64` here?") by selecting it in the editor.
+- **Analyze & Fix**: If you encounter an error (or the agent does), it performs a deep root-cause analysis and proposes a structured fix that you can review and apply with one click.
+
+### 3. Developer Experience
+- **Live Spanner Integration**: Connect directly to your Google Cloud Spanner instance to validate DDL and execute queries in real-time.
+- **IDE-like Interface**: Dark-mode Monaco editors with syntax highlighting, diff views, and dual-pane layouts.
+- **One-Click Migration**: Deploy your validated schema to a new Spanner database directly from the UI.
 
 ## ✅ Supported Dialects
-
-Night City currently supports schema conversion from the following sources:
+Night City supports conversion from:
 - **PostgreSQL**
 - **MySQL**
 - **Oracle**
@@ -26,44 +33,26 @@ Night City currently supports schema conversion from the following sources:
 
 The project consists of two main components:
 
-1.  **Backend (`schema-agent-backend`)**: A FastAPI Python service that hosts the AI agent (using Google Gemini models). It includes specialized tools for **Schema Verification**, **Error Analysis**, and **Spanner Migration**.
-2.  **Frontend (`schema-agent-ui`)**: A text-based, dark-mode React application providing the conversion interface.
+1.  **Backend (`schema-agent-backend`)**: A FastAPI Python service hosting the AI agent.
+    -   **Agent**: Uses Google Gemini Pro (1.5/2.0) with Tool Use capabilities.
+    -   **Spanner Tool**: Interfaces with Cloud Spanner for validation and query execution.
+    -   **Streaming**: Uses Server-Sent Events (NDJSON) to stream agent "thoughts" and logs to the UI.
 
-### 🧠 Agentic Architecture
-
-The core of Night City is a sophisticated AI pipeline that goes beyond simple translation:
-
-#### 1. Contextual Augmentation (RAG)
-Before the agent sees your schema, a **Context Manager** analyzes the Source DDL to inject relevant knowledge:
-- **DDL Hints**: Scans for specific SQL keywords (e.g., `AUTO_INCREMENT`, `FOREIGN KEY`) and injects the exact Spanner DDL syntax rules for those features.
-- **Feature Hints**: Detects patterns dependent on Spanner topology (e.g., identifying parent-child relationships for `INTERLEAVE IN PARENT`).
-- **Mapping Rules**: Enforces deterministic data type conversions (e.g., PostgreSQL `JSONB` → Spanner `JSON`) based on the selected dialect.
-
-#### 2. Chain of Thought (CoT) Reasoning
-The agent is prompted to follow a rigid chain-of-thought workflow to break down the source schema before conversion:
-1.  **Analyze**: Parse the source schema and identify constraints.
-2.  **Plan**: Propose Spanner-specific optimizations (Interleaving, Sharding keys).
-4.  **Auto-Correction Loop ("Auto Mode")**:
-    -   When enabled, the agent enters a **multi-turn loop**.
-    -   It acts as an autonomous engineer: Generate -> Validate -> Analyze Error -> Repair -> Re-validate.
-    -   This feedback loop continues until the schema is **confirmed valid** by the Spanner instance.
-
-#### 3. Human-in-the-loop Validation
-- **Validation**: Users can instantly validate the generated DDL against a real Spanner instance.
-- **Self-Correction**: If validation fails, the error is fed back to the agent ("Analyze & Fix"), which decompiles the error and attempts a targeted fix.
+2.  **Frontend (`schema-agent-ui`)**: A React + Vite application.
+    -   **State Management**: Zustand global store.
+    -   **Components**: Specialized editors for DDL and SQL, chat interface, and rigorous state management for spanner sessions.
 
 ## 🛠️ Setup & Installation
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 16+
-- Google Cloud Project with Spanner API enabled (for verification)
+- Google Cloud Project with Spanner API enabled
 - [Gemini API Key](https://ai.google.dev/gemini-api/docs/api-key)
-- Docker (optional, for containerized run)
+- Docker (optional)
 
 ### 1. Environment Configuration
-
-Create a `.env` file in the root directory (or ensure these variables are set in your environment/Cloud Run configuration). **These are mandatory for the application to start.**
+Create a `.env` file in the root directory.
 
 ```env
 # Google Cloud Configuration
@@ -72,13 +61,10 @@ SPANNER_INSTANCE_ID="your-instance-id"
 
 # Model Configuration
 GEMINI_API_KEY="your-gemini-api-key"
-# Optional: Defaults to gemini-3-pro-preview
-GEMINI_MODEL="gemini-3-pro-preview"
+GEMINI_MODEL="gemini-3-pro-preview" # or gemini-1.5-pro
 ```
 
-### 2. Running Locally (Development)
-
-Run backend and frontend separately for hot-reloading development.
+### 2. Running Locally
 
 #### Backend
 ```bash
@@ -96,52 +82,29 @@ npm install
 npm run dev
 ```
 
-### 3. Running Locally (Docker)
-
-You can build and run the entire application as a single container.
-
+### 3. Deploying to Google Cloud Run
 ```bash
-# Build the image
-docker build -t night-city .
-
-# Run the container (passing env vars from your .env file)
-docker run --env-file .env -p 8080:8080 night-city
-```
-The app will be available at `http://localhost:8080`.
-
-### 4. Deploying to Google Cloud Run
-
-Night City is optimized for Cloud Run. Specify your environment variables during deployment.
-
-```bash
-# Set your project
-gcloud config set project YOUR_PROJECT_ID
-
-# Deploy
 gcloud run deploy night-city \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --min-instances 1 \
-  --timeout 1200 \
-  --cpu 2 \
-  --memory 1Gi \
-  --set-env-vars="GEMINI_API_KEY=your-key,SPANNER_PROJECT_ID=your-project,SPANNER_INSTANCE_ID=your-instance,GEMINI_MODEL=gemini-3-pro-preview"
+  --set-env-vars="GEMINI_API_KEY=your-key,SPANNER_PROJECT_ID=your-project,SPANNER_INSTANCE_ID=your-instance"
 ```
-Once deployed, click the generated URL to start using Night City.
 
 ## 💡 Usage Guide
 
-1.  **Paste Schema**: Paste your MySQL/PostgreSQL schema into the left panel.
-2.  **Select Dialect**: Choose the source dialect.
-3.  **Convert**: Click the "Convert" button.
-    - *Tip*: You can manually validate the schema after conversion.
-5.  **Refine**:
-    - Highlight code to ask the agent specific questions.
-    - Chat with the agent to request changes (e.g., "Add a `shard_id` column").
-    - Click "Apply Fix" or "Review Fix" when the agent proposes code changes.
-6.  **Migrate**: 
-    - Once satisfied, click "Migrate" to deploy the schema to a new Google Cloud Spanner database.
+### Schema Conversion
+1.  **Paste Schema**: Input your source DDL (MySQL/Postgres/etc).
+2.  **Convert**: The agent will generate Spanner DDL.
+3.  **Validate**: The agent automatically attempts basic validation, but you can manually trigger "Validate" against your Spanner instance.
+4.  **Migrate**: Use the "Migrate" button to apply the schema to a new database.
+
+### Query Conversion
+1.  **Select Mode**: Switch to "Query Conversion" from the landing page.
+2.  **Paste Query**: Input your legacy SQL query.
+3.  **Connect Spanner**: Ensure you are connected to the target Spanner database (to verify column existence/types).
+4.  **Convert**: The agent will generate the equivalent GoogleSQL.
+5.  **Run**: Click "Validate" (or Run) to execute the query specifically against your Spanner database and see live results.
 
 ## 🤝 Contributing
-We welcome contributions! Please follow the `standard` code style and ensured all new features have appropriate tests.
+Contributions are welcome! Please ensure tests are added for new features.
