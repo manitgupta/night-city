@@ -56,3 +56,6 @@ class QueryConversionRequest(BaseModel):
 class SpannerQueryRequest(BaseModel):
     session_id: str
     sql: str
+
+class AppMigrationRequest(BaseModel):
+    github_url: str

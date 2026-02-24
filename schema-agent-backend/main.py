@@ -29,7 +29,7 @@ REQUIRED_ENV_VARS = ["GEMINI_API_KEY", "SPANNER_PROJECT_ID", "SPANNER_INSTANCE_I
 # Import app modules AFTER loading environment variables
 # This ensures that any module-level initialization (like ADK Agent) picks up the correct env vars
 from app.agent import agent_service
-from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest
+from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest, AppMigrationRequest
 from app.session_store import SessionStore
 
 from app.query.spanner_tool import SpannerDatabaseTool
@@ -162,6 +162,83 @@ async def multi_turn_convert_query_stream_v2(request: QueryConversionRequest):
         return StreamingResponse(generate(), media_type="application/x-ndjson")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/migrate-app")
+async def migrate_app(request: AppMigrationRequest):
+    try:
+        from fastapi.responses import StreamingResponse
+        import json
+        from app.workspace_manager import WorkspaceManager
+        from app.migration_agent import AppMigrationAgent
+
+        async def generate():
+            wm = WorkspaceManager()
+            try:
+                # 1. Clone
+                yield json.dumps({"type": "live_activity", "content": f"Cloning repository {request.github_url}..."}) + "\n"
+                workspace_path = wm.create_workspace(request.github_url)
+                yield json.dumps({"type": "live_activity", "content": f"Repository cloned successfully to temporary workspace."}) + "\n"
+                
+                # 2. Start Agent
+                agent = AppMigrationAgent(workspace_dir=workspace_path)
+                yield json.dumps({"type": "live_activity", "content": "Initializing Migration Agent..."}) + "\n"
+                
+                async for chunk in agent.migrate_app_stream():
+                    yield json.dumps(chunk) + "\n"
+                    
+                yield json.dumps({"type": "live_activity", "content": "Migration process completed."}) + "\n"
+            except Exception as e:
+                logger.error(f"Migration failed: {e}")
+                yield json.dumps({"type": "error", "content": f"Migration failed: {str(e)}"}) + "\n"
+            finally:
+                # 3. Cleanup Deferred for Download
+                # We return the workspace path in the final chunk so the UI can trigger a download
+                yield json.dumps({"type": "live_activity", "content": f"Workspace {workspace_path} preserved for download."}) + "\n"
+
+        return StreamingResponse(generate(), media_type="application/x-ndjson")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/download-workspace")
+async def download_workspace(workspace_path: str, background_tasks: BackgroundTasks):
+    from fastapi.responses import FileResponse
+    import shutil
+    import os
+    
+    if not workspace_path or not os.path.exists(workspace_path):
+        raise HTTPException(status_code=404, detail="Workspace not found or already cleaned up.")
+        
+    try:
+        # Create a zip archive of the workspace
+        # We'll store the zip in the parent directory temporarily
+        parent_dir = os.path.dirname(workspace_path)
+        base_name = os.path.basename(workspace_path)
+        zip_path = os.path.join(parent_dir, f"{base_name}_migrated")
+        
+        # shutil.make_archive adds the .zip extension
+        created_zip = shutil.make_archive(zip_path, 'zip', workspace_path)
+        
+        # Cleanup routine to run after the response is sent
+        def cleanup():
+            try:
+                if os.path.exists(workspace_path):
+                    shutil.rmtree(workspace_path)
+                if os.path.exists(created_zip):
+                    os.remove(created_zip)
+            except Exception as e:
+                logger.error(f"Failed to cleanup after download: {e}")
+                
+        background_tasks.add_task(cleanup)
+        
+        return FileResponse(
+            path=created_zip,
+            filename="migrated_app.zip",
+            media_type="application/zip",
+            background=background_tasks
+        )
+    except Exception as e:
+         logger.error(f"Failed to create workspace zip: {e}")
+         raise HTTPException(status_code=500, detail="Failed to prepare download")
 
 from pydantic import BaseModel
 
