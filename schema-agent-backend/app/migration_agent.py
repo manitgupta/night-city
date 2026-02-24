@@ -215,10 +215,26 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                     # No more function calls, we are done
                     logger.info("No function calls, migration complete.")
                     yield {"type": "log", "content": "Migration agent has decided to finish."}
+                    
+                    # Grab a git diff of the workspace to show the user
+                    git_diff = ""
+                    try:
+                        diff_result = subprocess.run(
+                            "git diff",
+                            shell=True,
+                            cwd=self.workspace_dir,
+                            capture_output=True,
+                            text=True
+                        )
+                        git_diff = diff_result.stdout
+                    except Exception as e:
+                        logger.error(f"Could not get git diff: {e}")
+                        
                     yield {
                         "type": "result",
                         "report": full_text,
-                        "workspace_dir": self.workspace_dir
+                        "workspace_dir": self.workspace_dir,
+                        "git_diff": git_diff
                     }
                     break
                     
