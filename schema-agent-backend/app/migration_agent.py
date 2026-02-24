@@ -31,12 +31,12 @@ class AppMigrationAgent:
                 start_new_session=True
             )
             try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=900)
             except asyncio.TimeoutError:
                 # Kill the entire process group
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 stdout, stderr = await process.communicate()
-                return "ERROR: Command timed out after 300 seconds."
+                return "ERROR: Command timed out after 900 seconds."
             
             stdout_str = stdout.decode('utf-8') if stdout else ""
             stderr_str = stderr.decode('utf-8') if stderr else ""
