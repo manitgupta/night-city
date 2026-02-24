@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { API_BASE_URL } from "../services/api";
 
 interface StreamEvent {
@@ -189,7 +191,11 @@ export function AppMigration() {
                 activities.map((act, i) => (
                   <div key={i} className="flex gap-3 text-sm">
                     <div className="flex flex-col items-center mt-1 text-emerald-500">
-                      <CheckCircle2 size={16} />
+                      {i === activities.length - 1 && migrationState === 'streaming' ? (
+                        <Loader2 className="animate-spin" size={16} />
+                      ) : (
+                          <CheckCircle2 size={16} />
+                      )}
                       {i < activities.length - 1 && <div className="w-px h-full bg-zinc-800 my-1"></div>}
                     </div>
                     <div className={`${i === activities.length - 1 ? 'text-zinc-200 font-medium' : 'text-zinc-500'}`}>
@@ -213,8 +219,14 @@ export function AppMigration() {
                   <p className="text-sm text-zinc-500 font-mono italic">Waiting for agent to initialize...</p>
                 ) : (
                   thoughts.map((thought, i) => (
-                    <div key={i} className="text-sm text-zinc-300 bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/50">
-                      {thought}
+                    <div key={i} className="text-zinc-300 bg-zinc-800/30 p-4 rounded-xl border border-zinc-700/50">
+                      <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                        >
+                          {thought}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   ))
                 )}

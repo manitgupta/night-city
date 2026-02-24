@@ -137,6 +137,7 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
         
         while turn_count < max_turns:
             logger.info(f"Model turn {turn_count}")
+            yield {"type": "live_activity", "content": f"Analyzing codebase and determining next steps (Step {turn_count + 1})..."}
             
             try:
                 response_stream = await self.client.aio.models.generate_content_stream(
@@ -176,6 +177,16 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                     
                     for fc in function_calls:
                         args_dict = {k: v for k,v in fc.args.items()} if fc.args else {}
+                        
+                        tool_desc = fc.name
+                        if fc.name == "execute_shell_command":
+                            tool_desc = f"Running shell command: {args_dict.get('command', '')}"
+                        elif fc.name == "read_file":
+                            tool_desc = f"Reading file: {args_dict.get('filepath', '')}"
+                        elif fc.name == "write_file":
+                            tool_desc = f"Modifying file: {args_dict.get('filepath', '')}"
+                            
+                        yield {"type": "live_activity", "content": tool_desc}
                         yield {"type": "log", "content": f"🔧 Executing Tool: {fc.name}({args_dict})"}
                         
                         response_data = ""
@@ -195,7 +206,8 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                             )
                         )
                         
-                        yield {"type": "log", "content": f"Result of {fc.name}: {response_data[:500]}..."}
+                        
+                        yield {"type": "log", "content": f"Result of {fc.name}:\n{response_data}"}
                         
                     contents.append(types.Content(role="tool", parts=tool_outputs))
                     
