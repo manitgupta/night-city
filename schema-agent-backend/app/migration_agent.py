@@ -10,34 +10,43 @@ logger = logging.getLogger(__name__)
 class AppMigrationAgent:
     def __init__(self, workspace_dir: str):
         self.workspace_dir = workspace_dir
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY not found.")
         self.client = genai.Client(api_key=api_key)
 
-    def _execute_shell_command(self, command: str) -> str:
-        """Executes a shell command in the workspace directory."""
+    async def _execute_shell_command(self, command: str) -> str:
+        """Executes a shell command in the workspace directory asynchronously."""
         logger.info(f"Executing: {command} in {self.workspace_dir}")
+        import asyncio
+        import signal
         try:
-            result = subprocess.run(
+            process = await asyncio.create_subprocess_shell(
                 command,
-                shell=True,
                 cwd=self.workspace_dir,
-                capture_output=True,
-                text=True,
-                timeout=120  # Prevent hanging tests
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+                start_new_session=True
             )
-            output = f"EXIT CODE: {result.returncode}\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-            if len(output) > 20000:
-                output = output[:20000] + "\n...[TRUNCATED]"
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                # Kill the entire process group
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                stdout, stderr = await process.communicate()
+                return "ERROR: Command timed out after 300 seconds."
+            
+            stdout_str = stdout.decode('utf-8') if stdout else ""
+            stderr_str = stderr.decode('utf-8') if stderr else ""
+            
+            output = f"EXIT CODE: {process.returncode}\nSTDOUT:\n{stdout_str}\nSTDERR:\n{stderr_str}"
             return output
-        except subprocess.TimeoutExpired:
-            return "ERROR: Command timed out after 120 seconds."
         except Exception as e:
             return f"ERROR: {str(e)}"
 
-    def _read_file(self, filepath: str) -> str:
+    async def _read_file(self, filepath: str) -> str:
         """Reads a file from the workspace."""
         full_path = os.path.join(self.workspace_dir, filepath)
         if not os.path.abspath(full_path).startswith(os.path.abspath(self.workspace_dir)):
@@ -49,7 +58,7 @@ class AppMigrationAgent:
         except Exception as e:
              return f"ERROR reading file: {str(e)}"
 
-    def _write_file(self, filepath: str, content: str) -> str:
+    async def _write_file(self, filepath: str, content: str) -> str:
         """Writes content to a file in the workspace."""
         full_path = os.path.join(self.workspace_dir, filepath)
         if not os.path.abspath(full_path).startswith(os.path.abspath(self.workspace_dir)):
@@ -191,11 +200,11 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                         
                         response_data = ""
                         if fc.name == "execute_shell_command":
-                            response_data = self._execute_shell_command(args_dict.get("command", ""))
+                            response_data = await self._execute_shell_command(args_dict.get("command", ""))
                         elif fc.name == "read_file":
-                            response_data = self._read_file(args_dict.get("filepath", ""))
+                            response_data = await self._read_file(args_dict.get("filepath", ""))
                         elif fc.name == "write_file":
-                            response_data = self._write_file(args_dict.get("filepath", ""), args_dict.get("content", ""))
+                            response_data = await self._write_file(args_dict.get("filepath", ""), args_dict.get("content", ""))
                         
                         tool_outputs.append(
                             types.Part(

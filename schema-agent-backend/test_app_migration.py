@@ -9,7 +9,7 @@ from main import app
 async def test_migration():
     # Use a tiny public repo. It has a pom.xml and some basic classes. 
     # The agent should clone it, read it, and realize it's an java app.
-    test_repo = "https://github.com/callicoder/spring-boot-mysql-rest-api-tutorial.git"
+    test_repo = "https://github.com/spring-projects/spring-petclinic.git"
     
     print(f"Starting test migration for: {test_repo}")
     

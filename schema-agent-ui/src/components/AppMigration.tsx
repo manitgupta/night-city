@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft } from "lucide-react";
+import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -169,32 +169,51 @@ export function AppMigration({ onBack }: AppMigrationProps) {
       </div>
 
       {migrationState === 'idle' && (
-        <div className="max-w-2xl mx-auto mt-20 w-full flex flex-col items-center">
-          <h3 className="text-2xl font-semibold text-zinc-100 mb-6">Enter GitHub Repository URL</h3>
-          <div className="w-full flex gap-4">
-            <input
-              type="text"
-              value={githubUrl}
-              onChange={(e) => setGithubUrl(e.target.value)}
-              placeholder="https://github.com/user/repo.git"
-              className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all font-mono text-sm"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleStartMigration();
-              }}
-            />
-            <button
-              onClick={handleStartMigration}
-              disabled={!githubUrl.trim()}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Migrate
-            </button>
+        <div className="max-w-4xl mx-auto mt-32 w-full flex flex-col items-center justify-center relative animate-in fade-in slide-in-from-bottom-8 duration-700">
+          {/* Aesthetic Spotlights */}
+          <div className="absolute inset-0 -z-10 translate-y-[-20%] pointer-events-none">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[500px] bg-emerald-600/20 blur-[120px] rounded-full mix-blend-screen" />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[400px] bg-cyan-600/10 blur-[100px] rounded-full mix-blend-screen" />
+          </div>
+
+          <h3 className="text-5xl font-bold mb-6 bg-gradient-to-br from-white via-zinc-200 to-zinc-500 bg-clip-text text-transparent text-center tracking-tight">
+            Migrate Legacy Codebases
+          </h3>
+          <p className="text-lg text-zinc-400 mb-12 text-center max-w-2xl leading-relaxed">
+            Provide a GitHub repository URL and watch our autonomous agents refactor your application for Google Cloud Spanner in real-time.
+          </p>
+
+          <div className="w-full max-w-3xl relative group">
+            {/* Glowing Border effect */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/40 via-cyan-500/40 to-emerald-500/40 rounded-full blur-md opacity-30 group-hover:opacity-60 transition duration-700 group-hover:duration-200"></div>
+
+            {/* Input Container */}
+            <div className="relative flex items-center bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/80 rounded-full p-2 shadow-2xl transition-all duration-300">
+              <input
+                type="text"
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                placeholder="https://github.com/user/repo"
+                className="flex-1 bg-transparent px-6 py-4 text-zinc-100 placeholder-zinc-500 focus:outline-none font-mono text-lg"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleStartMigration();
+                }}
+              />
+              <button
+                onClick={handleStartMigration}
+                disabled={!githubUrl.trim()}
+                className="bg-zinc-100 hover:bg-white text-zinc-950 font-semibold px-8 py-4 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 group/btn"
+              >
+                Start
+                <ArrowRight size={20} className="group-hover/btn:translate-x-1 transition-transform" />
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {migrationState === 'streaming' && (
-        <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
+        <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 animate-in fade-in slide-in-from-bottom-8 duration-700">
           {/* Stepper / Status */}
           <div className="w-full md:w-1/3 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4 overflow-hidden">
             <h3 className="font-semibold text-zinc-100 mb-2 flex items-center gap-2">
@@ -307,7 +326,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
       )}
 
       {(migrationState === 'complete' || migrationState === 'error') && (
-        <div className={`flex-1 flex flex-col items-center justify-center w-full min-h-0 mt-6`}>
+        <div className={`flex-1 flex flex-col items-center justify-center w-full min-h-0 mt-6 animate-in fade-in slide-in-from-bottom-8 duration-700`}>
           {migrationState === 'error' ? (
             <div className={`max-w-5xl mx-auto w-full bg-zinc-900/50 border border-red-500/30 rounded-2xl p-8 flex flex-col items-center`}>
               <h3 className="text-3xl font-bold text-red-400 mb-4">Migration Failed</h3>
