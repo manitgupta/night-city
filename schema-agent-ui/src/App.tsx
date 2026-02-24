@@ -35,15 +35,7 @@ function App() {
       )}
 
       {currentMode === 'migration' && (
-        <div className="relative">
-          <button
-            onClick={() => setCurrentMode('landing')}
-            className="absolute top-4 right-4 z-50 p-2 bg-zinc-900/50 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors backdrop-blur-md border border-zinc-800"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 6 6 6" /><path d="m6 6-12 12" /></svg>
-          </button>
-          <AppMigration />
-        </div>
+        <AppMigration onBack={() => setCurrentMode('landing')} />
       )}
     </>
   );

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2 } from "lucide-react";
+import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -14,7 +14,11 @@ interface StreamEvent {
   git_diff?: string;
 }
 
-export function AppMigration() {
+interface AppMigrationProps {
+  onBack: () => void;
+}
+
+export function AppMigration({ onBack }: AppMigrationProps) {
   const [githubUrl, setGithubUrl] = useState("");
   const [migrationState, setMigrationState] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
 
@@ -149,6 +153,12 @@ export function AppMigration() {
     <div className="h-screen w-full bg-zinc-950 p-6 flex flex-col font-sans text-zinc-300 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 mb-8">
+        <button
+          onClick={onBack}
+          className="mr-1 p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft size={24} />
+        </button>
         <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400">
           <FolderSync size={24} />
         </div>
