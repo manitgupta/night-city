@@ -16,8 +16,8 @@ class AppMigrationAgent:
             logger.error("GEMINI_API_KEY not found.")
         self.client = genai.Client(api_key=api_key)
 
-    async def _execute_shell_command(self, command: str) -> str:
-        """Executes a shell command in the workspace directory asynchronously."""
+    async def _execute_shell_command_stream(self, command: str):
+        """Executes a shell command in the workspace directory asynchronously and yields output."""
         logger.info(f"Executing: {command} in {self.workspace_dir}")
         import asyncio
         import signal
@@ -30,16 +30,48 @@ class AppMigrationAgent:
                 stdin=asyncio.subprocess.DEVNULL,
                 start_new_session=True
             )
-            try:
-                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=900)
-            except asyncio.TimeoutError:
-                # Kill the entire process group
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                stdout, stderr = await process.communicate()
-                return "ERROR: Command timed out after 900 seconds."
             
-            stdout_str = stdout.decode('utf-8') if stdout else ""
-            stderr_str = stderr.decode('utf-8') if stderr else ""
+            stdout_chunks = []
+            stderr_chunks = []
+            queue = asyncio.Queue()
+
+            async def read_stream(stream, chunks, is_stderr=False):
+                try:
+                    while True:
+                        line = await stream.readline()
+                        if not line:
+                            break
+                        line_str = line.decode('utf-8', errors='replace')
+                        chunks.append(line_str)
+                        await queue.put(("output", line_str))
+                except Exception as e:
+                    logger.error(f"Error reading stream: {e}")
+                finally:
+                    await queue.put(("done", is_stderr))
+
+            tasks = [
+                asyncio.create_task(read_stream(process.stdout, stdout_chunks, False)),
+                asyncio.create_task(read_stream(process.stderr, stderr_chunks, True))
+            ]
+
+            active_streams = 2
+            try:
+                while active_streams > 0:
+                    item_type, content = await asyncio.wait_for(queue.get(), timeout=900)
+                    if item_type == "output":
+                        yield ("output", content)
+                    elif item_type == "done":
+                        active_streams -= 1
+                    queue.task_done()
+                    
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                yield ("result", "ERROR: Command timed out after 900 seconds.")
+                return
+
+            stdout_str = "".join(stdout_chunks)
+            stderr_str = "".join(stderr_chunks)
             
             # Truncate to prevent token explosion
             max_chars = 4000
@@ -49,9 +81,9 @@ class AppMigrationAgent:
                 stderr_str = f"...[TRUNCATED]...\n{stderr_str[-max_chars:]}"
             
             output = f"EXIT CODE: {process.returncode}\nSTDOUT:\n{stdout_str}\nSTDERR:\n{stderr_str}"
-            return output
+            yield ("result", output)
         except Exception as e:
-            return f"ERROR: {str(e)}"
+            yield ("result", f"ERROR: {str(e)}")
 
     async def _read_file(self, filepath: str) -> str:
         """Reads a file from the workspace."""
@@ -216,7 +248,11 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                         
                         response_data = ""
                         if fc.name == "execute_shell_command":
-                            response_data = await self._execute_shell_command(args_dict.get("command", ""))
+                            async for item_type, content in self._execute_shell_command_stream(args_dict.get("command", "")):
+                                if item_type == "output":
+                                    yield {"type": "log", "content": content.rstrip('\r\n')}
+                                elif item_type == "result":
+                                    response_data = content
                         elif fc.name == "read_file":
                             response_data = await self._read_file(args_dict.get("filepath", ""))
                         elif fc.name == "write_file":
