@@ -120,7 +120,7 @@ class AppMigrationAgent:
                 temperature=0.0
             )
             response = await self.client.aio.models.generate_content(
-                model="gemini-3-pro-preview", 
+                model="gemini-2.5-flash", 
                 contents=f"Search the web to answer this query: {query}",
                 config=search_config
             )
