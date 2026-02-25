@@ -2,8 +2,9 @@ import { useState } from "react";
 import { LandingPage } from "./components/LandingPage";
 import { SchemaConverter } from "./components/SchemaConverter";
 import { QueryConverter } from "./components/QueryConverter";
+import { AppMigration } from "./components/AppMigration";
 
-type AppMode = 'landing' | 'schema' | 'query';
+type AppMode = 'landing' | 'schema' | 'query' | 'migration';
 
 function App() {
   const [currentMode, setCurrentMode] = useState<AppMode>('landing');
@@ -31,6 +32,10 @@ function App() {
           </button>
           <QueryConverter />
         </div>
+      )}
+
+      {currentMode === 'migration' && (
+        <AppMigration onBack={() => setCurrentMode('landing')} />
       )}
     </>
   );

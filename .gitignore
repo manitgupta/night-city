@@ -7,3 +7,5 @@ schema-agent-backend/app/query/__pycache__/
 .env
 schema-agent-backend/server.log
 toolbox
+.agents
+openspec/
