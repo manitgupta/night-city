@@ -39,6 +39,28 @@ class WorkspaceManager:
                 shutil.rmtree(workspace_path)
             raise RuntimeError(f"Failed to clone repository: {e.stderr}")
             
+    def create_workspace_from_local(self, local_path: str) -> str:
+        """
+        Creates a new workspace by copying a local directory, and returns the path.
+        """
+        session_id = str(uuid.uuid4())
+        workspace_path = os.path.join(self.base_dir, session_id)
+        
+        logger.info(f"Creating workspace from local directory {local_path} at {workspace_path}")
+        try:
+            abs_local_path = os.path.abspath(local_path)
+            if not os.path.exists(abs_local_path):
+                raise Exception(f"Local directory does not exist: {abs_local_path}")
+            if not os.path.isdir(abs_local_path):
+                raise Exception(f"Path is not a directory: {abs_local_path}")
+
+            shutil.copytree(abs_local_path, workspace_path, dirs_exist_ok=True)
+            logger.info("Local directory copied successfully.")
+            return workspace_path
+        except Exception as e:
+            logger.error(f"Failed to copy local directory: {e}")
+            raise
+
     def cleanup_workspace(self, workspace_path: str):
         """Removes the workspace directory."""
         if os.path.exists(workspace_path):

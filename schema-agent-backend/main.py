@@ -174,10 +174,17 @@ async def migrate_app(request: AppMigrationRequest):
         async def generate():
             wm = WorkspaceManager()
             try:
-                # 1. Clone
-                yield json.dumps({"type": "live_activity", "content": f"Cloning repository {request.github_url}..."}) + "\n"
-                workspace_path = wm.create_workspace(request.github_url)
-                yield json.dumps({"type": "live_activity", "content": f"Repository cloned successfully to temporary workspace."}) + "\n"
+                # 1. Setup Workspace
+                if request.local_directory:
+                    yield json.dumps({"type": "live_activity", "content": f"Copying local directory {request.local_directory}..."}) + "\n"
+                    workspace_path = wm.create_workspace_from_local(request.local_directory)
+                    yield json.dumps({"type": "live_activity", "content": f"Directory copied successfully to temporary workspace."}) + "\n"
+                elif request.github_url:
+                    yield json.dumps({"type": "live_activity", "content": f"Cloning repository {request.github_url}..."}) + "\n"
+                    workspace_path = wm.create_workspace(request.github_url)
+                    yield json.dumps({"type": "live_activity", "content": f"Repository cloned successfully to temporary workspace."}) + "\n"
+                else:
+                    raise ValueError("Either github_url or local_directory must be provided")
                 
                 # 2. Start Agent
                 agent = AppMigrationAgent(workspace_dir=workspace_path)

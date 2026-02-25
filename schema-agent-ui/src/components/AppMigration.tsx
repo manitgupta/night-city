@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
+import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft, ArrowRight, Github, HardDrive } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -21,6 +21,8 @@ interface AppMigrationProps {
 
 export function AppMigration({ onBack }: AppMigrationProps) {
   const [githubUrl, setGithubUrl] = useState("");
+  const [localDirectory, setLocalDirectory] = useState("");
+  const [inputType, setInputType] = useState<'github' | 'local'>('github');
   const [migrationState, setMigrationState] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
 
   const [activities, setActivities] = useState<string[]>([]);
@@ -49,7 +51,8 @@ export function AppMigration({ onBack }: AppMigrationProps) {
   }, [thoughtText]);
 
   const handleStartMigration = async () => {
-    if (!githubUrl.trim()) return;
+    if (inputType === 'github' && !githubUrl.trim()) return;
+    if (inputType === 'local' && !localDirectory.trim()) return;
 
     // Reset states
     setActivities([]);
@@ -63,13 +66,14 @@ export function AppMigration({ onBack }: AppMigrationProps) {
     setMigrationState('streaming');
 
     try {
+      const payload = inputType === 'github' ? { github_url: githubUrl } : { local_directory: localDirectory };
       const response = await fetch(`${API_BASE_URL}/api/migrate-app`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Accept": "application/x-ndjson"
         },
-        body: JSON.stringify({ github_url: githubUrl })
+        body: JSON.stringify(payload)
       });
 
       if (!response.body) throw new Error("ReadableStream not supported in this browser.");
@@ -191,30 +195,50 @@ export function AppMigration({ onBack }: AppMigrationProps) {
             Provide a GitHub repository URL and watch our autonomous agents refactor your application for Google Cloud Spanner in real-time.
           </p>
 
-          <div className="w-full max-w-3xl relative group">
-            {/* Glowing Border effect */}
-            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/40 via-cyan-500/40 to-emerald-500/40 rounded-full blur-md opacity-30 group-hover:opacity-60 transition duration-700 group-hover:duration-200"></div>
-
-            {/* Input Container */}
-            <div className="relative flex items-center bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/80 rounded-full p-2 shadow-2xl transition-all duration-300">
-              <input
-                type="text"
-                value={githubUrl}
-                onChange={(e) => setGithubUrl(e.target.value)}
-                placeholder="https://github.com/user/repo"
-                className="flex-1 bg-transparent px-6 py-4 text-zinc-100 placeholder-zinc-500 focus:outline-none font-mono text-lg"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleStartMigration();
-                }}
-              />
+          <div className="w-full max-w-3xl relative flex flex-col items-center gap-6">
+            {/* Input Type Toggle */}
+            <div className="flex items-center p-1 bg-zinc-900/80 border border-zinc-800 rounded-lg">
               <button
-                onClick={handleStartMigration}
-                disabled={!githubUrl.trim()}
-                className="bg-zinc-100 hover:bg-white text-zinc-950 font-semibold px-8 py-4 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 group/btn"
+                onClick={() => setInputType('github')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${inputType === 'github' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
               >
-                Start
-                <ArrowRight size={20} className="group-hover/btn:translate-x-1 transition-transform" />
+                <Github size={16} />
+                GitHub Repository
               </button>
+              <button
+                onClick={() => setInputType('local')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${inputType === 'local' ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}
+              >
+                <HardDrive size={16} />
+                Local Directory
+              </button>
+            </div>
+
+            <div className="w-full relative group">
+              {/* Glowing Border effect */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/40 via-cyan-500/40 to-emerald-500/40 rounded-full blur-md opacity-30 group-hover:opacity-60 transition duration-700 group-hover:duration-200"></div>
+
+              {/* Input Container */}
+              <div className="relative flex items-center bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/80 rounded-full p-2 shadow-2xl transition-all duration-300">
+                <input
+                  type="text"
+                  value={inputType === 'github' ? githubUrl : localDirectory}
+                  onChange={(e) => inputType === 'github' ? setGithubUrl(e.target.value) : setLocalDirectory(e.target.value)}
+                  placeholder={inputType === 'github' ? "https://github.com/user/repo" : "/absolute/path/to/local/project"}
+                  className="flex-1 bg-transparent px-6 py-4 text-zinc-100 placeholder-zinc-500 focus:outline-none font-mono text-lg"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleStartMigration();
+                  }}
+                />
+                <button
+                  onClick={handleStartMigration}
+                  disabled={inputType === 'github' ? !githubUrl.trim() : !localDirectory.trim()}
+                  className="bg-zinc-100 hover:bg-white text-zinc-950 font-semibold px-8 py-4 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 group/btn"
+                >
+                  Start
+                  <ArrowRight size={20} className="group-hover/btn:translate-x-1 transition-transform" />
+                </button>
+              </div>
             </div>
           </div>
         </div>

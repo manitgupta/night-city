@@ -58,4 +58,5 @@ class SpannerQueryRequest(BaseModel):
     sql: str
 
 class AppMigrationRequest(BaseModel):
-    github_url: str
+    github_url: Optional[str] = None
+    local_directory: Optional[str] = None
