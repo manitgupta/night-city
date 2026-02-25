@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from google import genai
 from google.genai import types
 import subprocess
+from app.prompts import generate_migration_agent_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -185,26 +186,7 @@ class AppMigrationAgent:
         """
         Runs the autonomous migration loop. Yields ndjson chunks to be sent to frontend.
         """
-        system_instruction = """You are an autonomous Application Migration Agent.
-Your job is to migrate the codebase in the current workspace to work with Google Cloud Spanner instead of its original database (e.g., MySQL or Postgres).
-
-Follow these steps iteratively:
-1. EXPLORE: Read the configuration files (like pom.xml, application.properties) to find database dependencies and URLs.
-2. REFACTOR CONFIG 1: Swap out dialects/drivers for Spanner (e.g., replace mysql-connector with google-cloud-spanner-jdbc).
-3. COMPILE/TEST: Run the application's tests (`mvn test`, `gradle test`, etc).
-4. OBSERVE & FIX: If a test fails due to a SQL syntax error, incompatible type, or unsupported Spanner feature, use `read_file` to see the source code, `write_file` to replace it with Spanner-compatible code, and rerun the tests.
-5. COMPLETE: Once all database-related tests pass (or you have exhausted your ability to fix them), stop. State your final report in your text block and end the process.
-
-IMPORTANT Emulator Setup:
-The Spanner emulator is available for your testing.
-Project: test-project
-Instance: test-instance
-Before running tests, ensure the emulator connection is active by prefixing your test commands with the environment variable export or setting the property correctly.
-export SPANNER_EMULATOR_HOST=localhost:9010
-
-IMPORTANT: If you cannot find a specific dependency version in a package manager (like Maven) after a few attempts, DO NOT get stuck in an endless loop trying to find it. Change course, try a different version, or remove the dependency if it's not strictly necessary.
-IMPORTANT: Do not write the final text block until you are absolutely finished or stuck. Use your tools sequentially to solve the problem.
-"""
+        system_instruction = generate_migration_agent_prompt()
 
         config = types.GenerateContentConfig(
             tools=self._tools,
@@ -234,31 +216,48 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
             else:
                 windowed_contents = contents
             
+            import asyncio
             try:
-                response_stream = await self.client.aio.models.generate_content_stream(
-                    model=self.model_name,
-                    contents=windowed_contents,
-                    config=config
-                )
+                max_retries = 50
+                retry_delay = 20
                 
-                model_parts = []
-                function_calls = []
-                full_text = ""
-                
-                async for chunk in response_stream:
-                    if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
-                         for part in chunk.candidates[0].content.parts:
-                             model_parts.append(part)
-                             
-                             if part.text:
-                                 is_thought = hasattr(part, "thought") and part.thought
-                                 if is_thought:
-                                     yield {"type": "thought", "content": part.text}
-                                 else:
-                                     full_text += part.text
-                             
-                             if part.function_call:
-                                 function_calls.append(part.function_call)
+                for attempt in range(max_retries):
+                    try:
+                        response_stream = await self.client.aio.models.generate_content_stream(
+                            model=self.model_name,
+                            contents=windowed_contents,
+                            config=config
+                        )
+                        
+                        model_parts = []
+                        function_calls = []
+                        full_text = ""
+                        
+                        async for chunk in response_stream:
+                            if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                                 for part in chunk.candidates[0].content.parts:
+                                     model_parts.append(part)
+                                     
+                                     if part.text:
+                                         is_thought = hasattr(part, "thought") and part.thought
+                                         if is_thought:
+                                             yield {"type": "thought", "content": part.text}
+                                         else:
+                                             full_text += part.text
+                                     
+                                     if part.function_call:
+                                         function_calls.append(part.function_call)
+                                         
+                        break # Success!
+                    except Exception as api_e:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"API stream failed (attempt {attempt + 1}/{max_retries}): {api_e}. Retrying in {retry_delay}s...")
+                            yield {"type": "log", "content": f"API stream failed, retrying in {retry_delay}s..."}
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2 # Exponential backoff
+                        else:
+                            logger.error(f"API stream failed after {max_retries} attempts: {api_e}")
+                            raise api_e # Re-raise to be caught by the outer try-except loop
                 
                 if not model_parts:
                     yield {"type": "log", "content": "Model returned empty response. Halting."}
