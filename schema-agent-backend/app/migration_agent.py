@@ -164,6 +164,13 @@ Follow these steps iteratively:
 4. OBSERVE & FIX: If a test fails due to a SQL syntax error, incompatible type, or unsupported Spanner feature, use `read_file` to see the source code, `write_file` to replace it with Spanner-compatible code, and rerun the tests.
 5. COMPLETE: Once all database-related tests pass (or you have exhausted your ability to fix them), stop. State your final report in your text block and end the process.
 
+IMPORTANT Emulator Setup:
+The Spanner emulator is available for your testing.
+Project: test-project
+Instance: test-instance
+Before running tests, ensure the emulator connection is active by prefixing your test commands with the environment variable export or setting the property correctly.
+export SPANNER_EMULATOR_HOST=localhost:9010
+
 IMPORTANT: If you cannot find a specific dependency version in a package manager (like Maven) after a few attempts, DO NOT get stuck in an endless loop trying to find it. Change course, try a different version, or remove the dependency if it's not strictly necessary.
 IMPORTANT: Do not write the final text block until you are absolutely finished or stuck. Use your tools sequentially to solve the problem.
 """
