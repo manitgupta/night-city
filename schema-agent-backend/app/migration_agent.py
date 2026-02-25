@@ -110,6 +110,26 @@ class AppMigrationAgent:
         except Exception as e:
              return f"ERROR writing file: {str(e)}"
 
+    async def _search_web(self, query: str) -> str:
+        """Helper method that uses a separate Gemini call for Google Search Grounding.
+        This bypasses the limitation of mixing function calling and search tools."""
+        try:
+            search_config = types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.0
+            )
+            response = await self.client.aio.models.generate_content(
+                model="gemini-3-pro-preview", 
+                contents=f"Search the web to answer this query: {query}",
+                config=search_config
+            )
+            if response.text:
+                return response.text
+            return "No relevant information found."
+        except Exception as e:
+            logger.error(f"Web search failed: {e}")
+            return f"ERROR performing web search: {str(e)}"
+
     # Tool Declarations
     _tools = [
         types.Tool(function_declarations=[
@@ -145,6 +165,17 @@ class AppMigrationAgent:
                         "content": types.Schema(type=types.Type.STRING, description="New contents of the file.")
                     },
                     required=["filepath", "content"]
+                )
+            ),
+            types.FunctionDeclaration(
+                name="search_web",
+                description="Search the web for information, documentation, or solutions to errors.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "query": types.Schema(type=types.Type.STRING, description="The search query.")
+                    },
+                    required=["query"]
                 )
             )
         ])
@@ -249,6 +280,8 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                             tool_desc = f"Reading file: {args_dict.get('filepath', '')}"
                         elif fc.name == "write_file":
                             tool_desc = f"Modifying file: {args_dict.get('filepath', '')}"
+                        elif fc.name == "search_web":
+                            tool_desc = f"Searching web for: {args_dict.get('query', '')}"
                             
                         yield {"type": "live_activity", "content": tool_desc}
                         yield {"type": "log", "content": f"🔧 Executing Tool: {fc.name}({args_dict})"}
@@ -264,6 +297,8 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                             response_data = await self._read_file(args_dict.get("filepath", ""))
                         elif fc.name == "write_file":
                             response_data = await self._write_file(args_dict.get("filepath", ""), args_dict.get("content", ""))
+                        elif fc.name == "search_web":
+                            response_data = await self._search_web(args_dict.get("query", ""))
                         
                         tool_outputs.append(
                             types.Part(
