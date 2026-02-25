@@ -276,35 +276,64 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
                     # No more function calls, we are done
                     logger.info("No function calls, migration complete.")
                     yield {"type": "log", "content": "Migration agent has decided to finish."}
-                    
-                    # Grab a git diff of the workspace to show the user
-                    git_diff = ""
-                    try:
-                        diff_result = subprocess.run(
-                            "git diff",
-                            shell=True,
-                            cwd=self.workspace_dir,
-                            capture_output=True,
-                            text=True
-                        )
-                        git_diff = diff_result.stdout
-                    except Exception as e:
-                        logger.error(f"Could not get git diff: {e}")
-                        
-                    yield {
-                        "type": "result",
-                        "report": full_text,
-                        "workspace_dir": self.workspace_dir,
-                        "git_diff": git_diff
-                    }
+                    termination_reason = "success"
                     break
                     
             except Exception as e:
                  logger.error(f"Error in agent stream: {e}", exc_info=True)
                  yield {"type": "log", "content": f"Pipeline Error: {str(e)}"}
-                 yield {"type": "result", "report": f"Failed due to error: {str(e)}"}
+                 termination_reason = "error"
+                 error_message = str(e)
                  break
         
         if turn_count >= max_turns:
             yield {"type": "log", "content": "Max turns reached. Halting migration."}
-            yield {"type": "result", "report": "Migration halted as it hit the maximum number of automated steps."}
+            termination_reason = "max_turns"
+
+        # Grab a git diff of the workspace to show the user
+        git_diff = ""
+        try:
+            diff_result = subprocess.run(
+                "git diff",
+                shell=True,
+                cwd=self.workspace_dir,
+                capture_output=True,
+                text=True
+            )
+            git_diff = diff_result.stdout
+        except Exception as e:
+            logger.error(f"Could not get git diff: {e}")
+            
+        yield {"type": "live_activity", "content": "Generating final detailed migration report..."}
+        
+        report_prompt = f"""You are an expert Application Migration Engineer. You must create a detailed Markdown report summarizing the refactoring changes made to migrate the application to Google Cloud Spanner based on the provided Git diff.
+Include sections such as 'Executive Summary', 'Key Changes', 'Modified Files', and 'Next Steps'. Create it beautifully formatted in Markdown.
+
+Here is the Git diff:
+```diff
+{git_diff}
+```
+"""
+        final_report = full_text if 'full_text' in locals() else ""
+        try:
+            report_response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=report_prompt
+            )
+            if report_response and hasattr(report_response, 'text') and report_response.text:
+                final_report = report_response.text
+            else:
+                final_report = "Completed changes. (Model returned empty report)"
+        except Exception as repr_e:
+            logger.error(f"Report generation failed: {repr_e}")
+            final_report = f"Failed to generate detailed report: {str(repr_e)}"
+
+        is_success = (termination_reason == "success")
+
+        yield {
+            "type": "result",
+            "report": final_report,
+            "workspace_dir": self.workspace_dir,
+            "git_diff": git_diff,
+            "success": is_success
+        }

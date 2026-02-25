@@ -12,6 +12,7 @@ interface StreamEvent {
   report?: string;
   workspace_dir?: string;
   git_diff?: string;
+  success?: boolean;
 }
 
 interface AppMigrationProps {
@@ -29,6 +30,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
   const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [workspaceDir, setWorkspaceDir] = useState<string | null>(null);
   const [gitDiff, setGitDiff] = useState<string | null>(null);
+  const [isSuccess, setIsSuccess] = useState<boolean>(true);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const thoughtRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
     setErrorDetails(null);
     setWorkspaceDir(null);
     setGitDiff(null);
+    setIsSuccess(true);
     setMigrationState('streaming');
 
     try {
@@ -111,6 +114,11 @@ export function AppMigration({ onBack }: AppMigrationProps) {
                     }
                     if (event.git_diff) {
                       setGitDiff(event.git_diff);
+                    }
+                    if (event.success !== undefined) {
+                      setIsSuccess(event.success);
+                    } else {
+                      setIsSuccess(true);
                     }
                     setMigrationState('complete');
                   }
@@ -338,8 +346,12 @@ export function AppMigration({ onBack }: AppMigrationProps) {
               <div className="w-full h-full flex flex-col min-h-0">
                 <div className="flex justify-between items-end mb-6 shrink-0">
                   <div>
-                    <h3 className="text-3xl font-bold text-zinc-100 mb-2">Migration Complete!</h3>
-                    <p className="text-zinc-400">The application was successfully refactored to use Google Cloud Spanner configurations.</p>
+                    <h3 className="text-3xl font-bold text-zinc-100 mb-2">
+                      {isSuccess ? "Migration Complete!" : "Migration Completed Partially"}
+                    </h3>
+                    <p className="text-zinc-400">
+                      {isSuccess ? "The application was successfully refactored to use Google Cloud Spanner configurations." : "The migration encountered an issue or limit, but partial progress was saved."}
+                    </p>
                   </div>
 
                   <div className="flex gap-4">
