@@ -41,6 +41,13 @@ class AppMigrationAgent:
             stdout_str = stdout.decode('utf-8') if stdout else ""
             stderr_str = stderr.decode('utf-8') if stderr else ""
             
+            # Truncate to prevent token explosion
+            max_chars = 4000
+            if len(stdout_str) > max_chars:
+                stdout_str = f"...[TRUNCATED]...\n{stdout_str[-max_chars:]}"
+            if len(stderr_str) > max_chars:
+                stderr_str = f"...[TRUNCATED]...\n{stderr_str[-max_chars:]}"
+            
             output = f"EXIT CODE: {process.returncode}\nSTDOUT:\n{stdout_str}\nSTDERR:\n{stderr_str}"
             return output
         except Exception as e:
@@ -125,6 +132,7 @@ Follow these steps iteratively:
 4. OBSERVE & FIX: If a test fails due to a SQL syntax error, incompatible type, or unsupported Spanner feature, use `read_file` to see the source code, `write_file` to replace it with Spanner-compatible code, and rerun the tests.
 5. COMPLETE: Once all database-related tests pass (or you have exhausted your ability to fix them), stop. State your final report in your text block and end the process.
 
+IMPORTANT: If you cannot find a specific dependency version in a package manager (like Maven) after a few attempts, DO NOT get stuck in an endless loop trying to find it. Change course, try a different version, or remove the dependency if it's not strictly necessary.
 IMPORTANT: Do not write the final text block until you are absolutely finished or stuck. Use your tools sequentially to solve the problem.
 """
 
@@ -148,10 +156,18 @@ IMPORTANT: Do not write the final text block until you are absolutely finished o
             logger.info(f"Model turn {turn_count}")
             yield {"type": "live_activity", "content": f"Analyzing codebase and determining next steps (Step {turn_count + 1})..."}
             
+            # Implement sliding window to prevent token explosion
+            MAX_RETAINED_TURNS = 10 # 20 messages (model + tool)
+            if len(contents) > (MAX_RETAINED_TURNS * 2) + 1:
+                # Keep initial user prompt + latest N turns
+                windowed_contents = [contents[0]] + contents[-(MAX_RETAINED_TURNS * 2):]
+            else:
+                windowed_contents = contents
+            
             try:
                 response_stream = await self.client.aio.models.generate_content_stream(
                     model=self.model_name,
-                    contents=contents,
+                    contents=windowed_contents,
                     config=config
                 )
                 

@@ -140,7 +140,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
     if (!workspaceDir) return;
 
     // Create an invisible anchor tag to trigger the browser download
-    const url = `http://localhost:8000/api/download-workspace?workspace_path=${encodeURIComponent(workspaceDir)}`;
+    const url = `${API_BASE_URL}/api/download-workspace?workspace_path=${encodeURIComponent(workspaceDir)}`;
     const a = document.createElement('a');
     a.href = url;
     a.download = 'migrated_app.zip'; // The backend determines the actual filename, but this is a fallback hint
