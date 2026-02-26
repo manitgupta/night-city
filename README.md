@@ -84,14 +84,71 @@ npm install
 npm run dev
 ```
 
-### 3. Deploying to Google Cloud Run
+### 3. Deploying to Google Cloud Run (with Spanner Emulator Sidecar)
+
+To allow the migration agent to run compatibility tests natively, we deploy the app alongside a Cloud Spanner emulator using Cloud Run's multi-container (sidecar) feature.
+
+### Step 1: Build the Image
+Before deploying, you **must** build and submit your container image to Artifact Registry or Container Registry:
 ```bash
-gcloud run deploy night-city \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars="GEMINI_API_KEY=your-key,SPANNER_PROJECT_ID=your-project,SPANNER_INSTANCE_ID=your-instance"
+gcloud builds submit --tag gcr.io/your-project-id/night-city
 ```
+
+### Step 2: Deploy the Service
+Define the multi-container configuration in a YAML file. 
+
+1.  Create `service.yaml`:
+    ```yaml
+    apiVersion: serving.knative.dev/v1
+    kind: Service
+    metadata:
+      name: night-city
+      labels:
+        cloud.googleapis.com/location: us-central1
+    spec:
+      template:
+        metadata:
+          annotations:
+            run.googleapis.com/container-dependencies: '{"migration-agent": ["spanner-emulator"]}'
+            run.googleapis.com/execution-environment: gen2
+        spec:
+          containers:
+          - image: gcr.io/your-project-id/night-city
+            name: migration-agent
+            ports:
+            - containerPort: 8080
+            resources:
+              limits:
+                cpu: "6"
+                memory: "24Gi"
+            env:
+            - name: GEMINI_API_KEY
+              value: "your-gemini-api-key"
+            - name: SPANNER_PROJECT_ID
+              value: "your-project-id"
+            - name: SPANNER_INSTANCE_ID
+              value: "your-instance-id"
+            - name: SPANNER_EMULATOR_HOST
+              value: "localhost:9010"
+          - image: gcr.io/cloud-spanner-emulator/emulator
+            name: spanner-emulator
+            resources:
+              limits:
+                cpu: "2"
+                memory: "8Gi"
+            startupProbe:
+              tcpSocket:
+                port: 9010
+              initialDelaySeconds: 2
+              timeoutSeconds: 2
+              periodSeconds: 5
+              failureThreshold: 3
+    ```
+
+2.  Deploy the service:
+    ```bash
+    gcloud run services replace service.yaml
+    ```
 
 ## 💡 Usage Guide
 

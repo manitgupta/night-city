@@ -9,3 +9,4 @@ schema-agent-backend/server.log
 toolbox
 .agents
 openspec/
+services.yaml

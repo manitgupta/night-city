@@ -23,13 +23,15 @@ class AppMigrationAgent:
         import asyncio
         import signal
         try:
+            env = os.environ.copy()
             process = await asyncio.create_subprocess_shell(
                 command,
                 cwd=self.workspace_dir,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.DEVNULL,
-                start_new_session=True
+                start_new_session=True,
+                env=env
             )
             
             stdout_chunks = []
