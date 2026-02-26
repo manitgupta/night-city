@@ -156,7 +156,7 @@ class AppMigrationAgent:
         types.Tool(function_declarations=[
             types.FunctionDeclaration(
                 name="execute_shell_command",
-                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory. If the command modifies code, dependencies or runs tests, you MUST call the `log_context` tool concurrently. If the command execution returns an error, you must log that error.",
+                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory. If the command modifies code, dependencies or runs tests, you should use `log_context` to track your progress and any resulting errors.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -178,7 +178,7 @@ class AppMigrationAgent:
             ),
             types.FunctionDeclaration(
                 name="write_file",
-                description="Modify or create a file in the workspace. Will overwrite if exists. You MUST call the `log_context` tool concurrently whenever you use this tool.",
+                description="Modify or create a file in the workspace. Will overwrite if exists. You should track your modifications using `log_context`.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -201,7 +201,7 @@ class AppMigrationAgent:
             ),
             types.FunctionDeclaration(
                 name="log_context",
-                description="Append a short, crisp summary to your continuous context log. You MUST call this tool concurrently whenever you use `write_file` or execute a modifying shell command.",
+                description="Append a short, crisp summary to your continuous context log. Use this tool tracking modifications, errors, and intent so you don't repeat mistakes.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -247,6 +247,7 @@ class AppMigrationAgent:
                 windowed_contents = contents
             
             import asyncio
+            import time
             try:
                 max_retries = 50
                 retry_delay = 20
@@ -270,6 +271,8 @@ class AppMigrationAgent:
 
                 for attempt in range(max_retries):
                     try:
+                        last_activity_time = time.time()
+                        
                         fetch_task = asyncio.create_task(self.client.aio.models.generate_content_stream(
                             model=self.model_name,
                             contents=windowed_contents,
@@ -280,6 +283,9 @@ class AppMigrationAgent:
                             if self.stop_requested:
                                 fetch_task.cancel()
                                 break
+                            if time.time() - last_activity_time > 300:
+                                fetch_task.cancel()
+                                raise TimeoutError("Gemini API connection timed out after 5 minutes of no response.")
                             await asyncio.wait([fetch_task], timeout=1.0)
                             
                         if self.stop_requested:
@@ -302,10 +308,15 @@ class AppMigrationAgent:
                                 if self.stop_requested:
                                     chunk_task.cancel()
                                     break
+                                if time.time() - last_activity_time > 300:
+                                    chunk_task.cancel()
+                                    raise TimeoutError("Gemini API stream chunk timed out after 5 minutes of no response.")
                                 await asyncio.wait([chunk_task], timeout=1.0)
                                 
                             if self.stop_requested:
                                 break
+                                
+                            last_activity_time = time.time()
                                 
                             try:
                                 chunk = chunk_task.result()

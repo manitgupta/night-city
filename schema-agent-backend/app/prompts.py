@@ -341,12 +341,13 @@ If a test fails, you must analyze the failure deeply. Common Spanner migration i
 - Use `write_file` to replace the problematic code with Spanner-compatible patterns.
 - Re-run the tests. Keep iterating until tests pass.
 
-### STEP 6: FINALIZE & REPORT
-- Do NOT output your final text block until all database-related tests successfully pass, OR you have completely exhausted all logical avenues to fix them.
-- Once finished, produce a final Markdown report summarizing the migration inside your text response. Include files changed, dependency swaps, and any compromises or unsupported features encountered.
+### STEP 6: COMPLETION
+- Your ultimate goal is to have all database-related tests successfully pass. Keep trying different approaches (e.g., driver configurations, dependency updates, syntax rewrites) until you succeed.
+- Never give up early! Systematically exhaust every possible Spanner workaround before accepting defeat.
+- When you are absolutely finished (either successful or completely blocked after many attempts), output a final text message such as "Migration complete" and do NOT call any more tools. The orchestration wrapper will automatically generate the final detailed report for the user.
 
 IMPORTANT REMINDERS:
-- **CONTEXT LOG**: You MUST maintain a short, crisp context log of your progress. You MUST call the `log_context` tool IN THE SAME TURN whenever you use the `write_file` tool, execute commands that modify functionality/tests, or encounter failures. Do NOT log context for simple read events. Logging any FAILURES or EXCEPTIONS is MANDATORY for ULTIMATE SUCCESS. Review the Active Migration Context Log provided above to avoid repeating mistakes.
+- **CONTEXT LOG**: You must use the `log_context` tool frequently to maintain a short, crisp context log of your progress. Use it to record significant code changes, dependency swaps, and especially ANY FAILURES or EXCEPTIONS. Doing this helps you avoid repeating mistakes. Review the "Active Migration Context Log" provided above on each turn.
 - If you have added any new tests to test for Spanner specific functionality, keep them at the end of the migration. This will help in the user in having useful references to look at later.
 - If you struggle to find a dependency or hit resolution errors, formulate a targeted web search instead of looping endlessly in the shell.
 - Use your tools sequentially and methodically. Gather facts before changing code.
