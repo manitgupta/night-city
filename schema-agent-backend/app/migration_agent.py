@@ -156,7 +156,7 @@ class AppMigrationAgent:
         types.Tool(function_declarations=[
             types.FunctionDeclaration(
                 name="execute_shell_command",
-                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory. If the command modifies code, dependencies or runs tests, you MUST call the `log_context` tool concurrently.",
+                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory. If the command modifies code, dependencies or runs tests, you MUST call the `log_context` tool concurrently. If the command execution returns an error, you must log that error.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={

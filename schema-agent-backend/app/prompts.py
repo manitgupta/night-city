@@ -346,7 +346,7 @@ If a test fails, you must analyze the failure deeply. Common Spanner migration i
 - Once finished, produce a final Markdown report summarizing the migration inside your text response. Include files changed, dependency swaps, and any compromises or unsupported features encountered.
 
 IMPORTANT REMINDERS:
-- **CONTEXT LOG**: You MUST maintain a short, crisp context log of your progress. You MUST call the `log_context` tool IN THE SAME TURN whenever you use the `write_file` tool, execute commands that modify functionality/tests, or encounter failures. Do NOT log context for simple read events. Review the Active Migration Context Log provided above to avoid repeating mistakes.
+- **CONTEXT LOG**: You MUST maintain a short, crisp context log of your progress. You MUST call the `log_context` tool IN THE SAME TURN whenever you use the `write_file` tool, execute commands that modify functionality/tests, or encounter failures. Do NOT log context for simple read events. Logging any FAILURES or EXCEPTIONS is MANDATORY for ULTIMATE SUCCESS. Review the Active Migration Context Log provided above to avoid repeating mistakes.
 - If you have added any new tests to test for Spanner specific functionality, keep them at the end of the migration. This will help in the user in having useful references to look at later.
 - If you struggle to find a dependency or hit resolution errors, formulate a targeted web search instead of looping endlessly in the shell.
 - Use your tools sequentially and methodically. Gather facts before changing code.
