@@ -343,6 +343,8 @@ class AppMigrationAgent:
         # Grab a git diff of the workspace to show the user
         git_diff = ""
         try:
+            # Track new files before generating the diff so they are included
+            subprocess.run("git add -N .", shell=True, cwd=self.workspace_dir, capture_output=True)
             diff_result = subprocess.run(
                 "git diff",
                 shell=True,
@@ -358,6 +360,10 @@ class AppMigrationAgent:
         
         report_prompt = f"""You are an expert Application Migration Engineer. You must create a detailed Markdown report summarizing the refactoring changes made to migrate the application to Google Cloud Spanner based on the provided Git diff.
 Include sections such as 'Executive Summary', 'Key Changes', 'Modified Files', and 'Next Steps'. Create it beautifully formatted in Markdown.
+
+CRITICAL INSTRUCTION: If you include any 'diff' code blocks in your report, ensure they are NOT inverted! In standard diffs:
+- Lines ADDED by the migration (new Spanner code) MUST start with a '+' character.
+- Lines REMOVED by the migration (legacy code) MUST start with a '-' character.
 
 Here is the Git diff:
 ```diff

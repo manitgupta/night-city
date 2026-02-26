@@ -56,6 +56,17 @@ class WorkspaceManager:
 
             shutil.copytree(abs_local_path, workspace_path, dirs_exist_ok=True)
             logger.info("Local directory copied successfully.")
+            
+            # Initialize git and create a baseline commit to ensure accurate 'git diff' later
+            try:
+                subprocess.run(["git", "init"], cwd=workspace_path, check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.email", "agent@nightcity.local"], cwd=workspace_path, check=True, capture_output=True)
+                subprocess.run(["git", "config", "user.name", "Migration Agent"], cwd=workspace_path, check=True, capture_output=True)
+                subprocess.run(["git", "add", "-A"], cwd=workspace_path, check=True, capture_output=True)
+                subprocess.run(["git", "commit", "-m", "Initial baseline"], cwd=workspace_path, capture_output=True)
+            except Exception as git_e:
+                logger.warning(f"Failed to initialize baseline git repo in workspace: {git_e}")
+                
             return workspace_path
         except Exception as e:
             logger.error(f"Failed to copy local directory: {e}")
