@@ -60,3 +60,4 @@ class SpannerQueryRequest(BaseModel):
 class AppMigrationRequest(BaseModel):
     github_url: Optional[str] = None
     local_directory: Optional[str] = None
+    migration_id: Optional[str] = None

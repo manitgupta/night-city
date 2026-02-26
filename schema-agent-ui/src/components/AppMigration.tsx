@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft, ArrowRight, Github, HardDrive } from "lucide-react";
+import { FolderSync, Loader2, TerminalSquare, BrainCircuit, CheckCircle2, ArrowLeft, ArrowRight, Github, HardDrive, SquareAsterisk } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -24,6 +24,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
   const [localDirectory, setLocalDirectory] = useState("");
   const [inputType, setInputType] = useState<'github' | 'local'>('github');
   const [migrationState, setMigrationState] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
+  const [activeMigrationId, setActiveMigrationId] = useState<string | null>(null);
 
   const [activities, setActivities] = useState<string[]>([]);
   const [thoughtText, setThoughtText] = useState<string>("");
@@ -65,8 +66,14 @@ export function AppMigration({ onBack }: AppMigrationProps) {
     setIsSuccess(true);
     setMigrationState('streaming');
 
+    const migrationId = crypto.randomUUID();
+    setActiveMigrationId(migrationId);
+
     try {
-      const payload = inputType === 'github' ? { github_url: githubUrl } : { local_directory: localDirectory };
+      const payload = inputType === 'github' 
+        ? { github_url: githubUrl, migration_id: migrationId } 
+        : { local_directory: localDirectory, migration_id: migrationId };
+        
       const response = await fetch(`${API_BASE_URL}/api/migrate-app`, {
         method: "POST",
         headers: {
@@ -145,6 +152,22 @@ export function AppMigration({ onBack }: AppMigrationProps) {
       console.error(err);
       setErrorDetails(err.message || "Failed to initiate migration.");
       setMigrationState('error');
+    } finally {
+      setActiveMigrationId(null);
+    }
+  };
+
+  const handleStopMigration = async () => {
+    if (!activeMigrationId) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/stop-migration/${activeMigrationId}`, {
+            method: 'POST'
+        });
+        if (!response.ok) {
+            console.error("Failed to stop migration:", await response.text());
+        }
+    } catch (error) {
+         console.error("Error stopping migration:", error);
     }
   };
 
@@ -247,11 +270,22 @@ export function AppMigration({ onBack }: AppMigrationProps) {
       {migrationState === 'streaming' && (
         <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 animate-in fade-in slide-in-from-bottom-8 duration-700">
           {/* Stepper / Status */}
-          <div className="w-full md:w-1/3 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4 overflow-hidden">
-            <h3 className="font-semibold text-zinc-100 mb-2 flex items-center gap-2">
-              <Loader2 className="animate-spin text-emerald-500" size={18} />
-              Live Activity Tracker
-            </h3>
+          <div className="w-full md:w-1/3 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 flex flex-col gap-4 overflow-hidden relative">
+            <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold text-zinc-100 flex items-center gap-2">
+                <Loader2 className="animate-spin text-emerald-500" size={18} />
+                Live Activity Tracker
+                </h3>
+                {migrationState === 'streaming' && (
+                    <button
+                        onClick={handleStopMigration}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium transition-colors border border-red-500/20"
+                    >
+                        <SquareAsterisk size={14} />
+                        Stop 
+                    </button>
+                )}
+            </div>
 
             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
               {activities.length === 0 ? (

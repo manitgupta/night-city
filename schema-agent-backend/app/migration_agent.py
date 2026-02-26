@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class AppMigrationAgent:
     def __init__(self, workspace_dir: str):
         self.workspace_dir = workspace_dir
+        self.stop_requested = False
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -207,6 +208,12 @@ class AppMigrationAgent:
         turn_count = 0
         
         while turn_count < max_turns:
+            if self.stop_requested:
+                logger.info(f"Migration agent stopped by user.")
+                yield {"type": "log", "content": "Migration agent stopped by user request."}
+                termination_reason = "stopped"
+                break
+            
             logger.info(f"Model turn {turn_count}")
             yield {"type": "live_activity", "content": f"Analyzing codebase and determining next steps (Step {turn_count + 1})..."}
             

@@ -163,6 +163,8 @@ async def multi_turn_convert_query_stream_v2(request: QueryConversionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+active_migrations = {}
+
 @app.post("/api/migrate-app")
 async def migrate_app(request: AppMigrationRequest):
     try:
@@ -188,6 +190,10 @@ async def migrate_app(request: AppMigrationRequest):
                 
                 # 2. Start Agent
                 agent = AppMigrationAgent(workspace_dir=workspace_path)
+                
+                if request.migration_id:
+                    active_migrations[request.migration_id] = agent
+                    
                 yield json.dumps({"type": "live_activity", "content": "Initializing Migration Agent..."}) + "\n"
                 
                 async for chunk in agent.migrate_app_stream():
@@ -198,6 +204,8 @@ async def migrate_app(request: AppMigrationRequest):
                 logger.error(f"Migration failed: {e}")
                 yield json.dumps({"type": "error", "content": f"Migration failed: {str(e)}"}) + "\n"
             finally:
+                if request.migration_id and request.migration_id in active_migrations:
+                    del active_migrations[request.migration_id]
                 # 3. Cleanup Deferred for Download
                 # We return the workspace path in the final chunk so the UI can trigger a download
                 yield json.dumps({"type": "live_activity", "content": f"Workspace {workspace_path} preserved for download."}) + "\n"
@@ -246,6 +254,14 @@ async def download_workspace(workspace_path: str, background_tasks: BackgroundTa
     except Exception as e:
          logger.error(f"Failed to create workspace zip: {e}")
          raise HTTPException(status_code=500, detail="Failed to prepare download")
+
+@app.post("/api/stop-migration/{migration_id}")
+async def stop_migration(migration_id: str):
+    if migration_id in active_migrations:
+        active_migrations[migration_id].stop_requested = True
+        return {"success": True, "message": "Migration stop requested."}
+    else:
+        raise HTTPException(status_code=404, detail="Migration not found or already completed.")
 
 from pydantic import BaseModel
 
