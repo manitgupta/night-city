@@ -209,7 +209,7 @@ class AppMigrationAgent:
             yield {"type": "live_activity", "content": f"Analyzing codebase and determining next steps (Step {turn_count + 1})..."}
             
             # Implement sliding window to prevent token explosion
-            MAX_RETAINED_TURNS = 10 # 20 messages (model + tool)
+            MAX_RETAINED_TURNS = 50 # 100 messages (model + tool)
             if len(contents) > (MAX_RETAINED_TURNS * 2) + 1:
                 # Keep initial user prompt + latest N turns
                 windowed_contents = [contents[0]] + contents[-(MAX_RETAINED_TURNS * 2):]

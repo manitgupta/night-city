@@ -13,8 +13,28 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install system dependencies if any (none needed for basic python app usually, maybe for some py packages)
-# RUN apt-get update && apt-get install -y --no-install-recommends ...
+# Install system dependencies and command-line tools for app migration agent
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    maven \
+    gradle \
+    default-jdk \
+    findutils \
+    grep \
+    coreutils \
+    curl \
+    wget \
+    jq \
+    unzip \
+    tar \
+    nodejs \
+    npm \
+    golang-go \
+    make \
+    tree \
+    sed \
+    gawk \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY schema-agent-backend/requirements.txt .
