@@ -59,12 +59,19 @@ class AppMigrationAgent:
                 asyncio.create_task(read_stream(process.stderr, stderr_chunks, True))
             ]
 
+            import time
+            start_time = time.time()
             active_streams = 2
             try:
                 while active_streams > 0:
                     if self.stop_requested:
                          os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                          yield ("result", "ERROR: Command was interrupted by user request.")
+                         return
+
+                    if time.time() - start_time > 600:
+                         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                         yield ("result", "ERROR: Command timed out after 10 minutes.")
                          return
                          
                     try:
