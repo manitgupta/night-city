@@ -34,7 +34,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tree \
     sed \
     gawk \
+    gnupg \
+    apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Google Cloud CLI
+RUN curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /usr/share/keyrings/cloud.google-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google-archive-keyring.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    apt-get update && apt-get install -y google-cloud-cli && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY schema-agent-backend/requirements.txt .
@@ -42,6 +50,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
 COPY schema-agent-backend/ .
+RUN chmod +x start.sh
 
 # Copy built frontend assets to app/static
 # The backend expects static files in "app/static" as per main.py configuration
@@ -57,4 +66,4 @@ EXPOSE 8080
 
 # Run the application
 # We use hostname 0.0.0.0 for container networking
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["./start.sh"]
