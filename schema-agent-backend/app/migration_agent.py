@@ -17,6 +17,7 @@ class AppMigrationAgent:
         if not api_key:
             logger.error("GEMINI_API_KEY not found.")
         self.client = genai.Client(api_key=api_key)
+        self.context_log = []
 
     async def _execute_shell_command_stream(self, command: str):
         """Executes a shell command in the workspace directory asynchronously and yields output."""
@@ -61,17 +62,27 @@ class AppMigrationAgent:
             active_streams = 2
             try:
                 while active_streams > 0:
-                    item_type, content = await asyncio.wait_for(queue.get(), timeout=900)
-                    if item_type == "output":
-                        yield ("output", content)
-                    elif item_type == "done":
-                        active_streams -= 1
-                    queue.task_done()
+                    if self.stop_requested:
+                         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                         yield ("result", "ERROR: Command was interrupted by user request.")
+                         return
+                         
+                    try:
+                        # Use a shorter timeout to allow periodic checking of self.stop_requested
+                        item_type, content = await asyncio.wait_for(queue.get(), timeout=1.0)
+                        if item_type == "output":
+                            yield ("output", content)
+                        elif item_type == "done":
+                            active_streams -= 1
+                        queue.task_done()
+                    except asyncio.TimeoutError:
+                        # Just loop around and check self.stop_requested again
+                        pass
                     
                 await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                yield ("result", "ERROR: Command timed out after 900 seconds.")
+                yield ("result", "ERROR: Command timed out after wait.")
                 return
 
             stdout_str = "".join(stdout_chunks)
@@ -113,6 +124,12 @@ class AppMigrationAgent:
             return f"Successfully wrote to {filepath}"
         except Exception as e:
              return f"ERROR writing file: {str(e)}"
+
+    async def _log_context(self, entry: str) -> str:
+        """Logs a context entry summarizing recent changes or attempts."""
+        logger.info(f"Context logged: {entry}")
+        self.context_log.append(entry)
+        return "Successfully logged context."
 
     async def _search_web(self, query: str) -> str:
         """Helper method that uses a separate Gemini call for Google Search Grounding.
@@ -181,6 +198,17 @@ class AppMigrationAgent:
                     },
                     required=["query"]
                 )
+            ),
+            types.FunctionDeclaration(
+                name="log_context",
+                description="Append a short, crisp summary of a code change you just made, or a failed attempt, to your continuous context log. You MUST use this after making modifications to keep track of your progress.",
+                parameters=types.Schema(
+                    type=types.Type.OBJECT,
+                    properties={
+                        "entry": types.Schema(type=types.Type.STRING, description="The textual summary of what was done or attempted.")
+                    },
+                    required=["entry"]
+                )
             )
         ])
     ]
@@ -189,14 +217,7 @@ class AppMigrationAgent:
         """
         Runs the autonomous migration loop. Yields ndjson chunks to be sent to frontend.
         """
-        system_instruction = generate_migration_agent_prompt()
-
-        config = types.GenerateContentConfig(
-            tools=self._tools,
-            temperature=0.1,
-            thinking_config=types.ThinkingConfig(include_thoughts=True),
-            system_instruction=system_instruction
-        )
+        base_system_instruction = generate_migration_agent_prompt()
 
         contents = [
             types.Content(
@@ -230,19 +251,67 @@ class AppMigrationAgent:
                 max_retries = 50
                 retry_delay = 20
                 
+                # Dynamically construct the prompt with the context log
+                dynamic_instruction = base_system_instruction
+                if self.context_log:
+                    dynamic_instruction += "\n\n### ACTIVE MIGRATION CONTEXT LOG\n"
+                    dynamic_instruction += "You have logged the following actions during this migration. Review them to avoid repeating efforts:\n"
+                    for i, log_entry in enumerate(self.context_log, 1):
+                        dynamic_instruction += f"{i}. {log_entry}\n"
+                else:
+                    dynamic_instruction += "\n\n### ACTIVE MIGRATION CONTEXT LOG\nNo context logged yet.\n"
+                    
+                dynamic_config = types.GenerateContentConfig(
+                    tools=self._tools,
+                    temperature=0.1,
+                    thinking_config=types.ThinkingConfig(include_thoughts=True),
+                    system_instruction=dynamic_instruction
+                )
+
                 for attempt in range(max_retries):
                     try:
-                        response_stream = await self.client.aio.models.generate_content_stream(
+                        fetch_task = asyncio.create_task(self.client.aio.models.generate_content_stream(
                             model=self.model_name,
                             contents=windowed_contents,
-                            config=config
-                        )
+                            config=dynamic_config
+                        ))
+                        
+                        while not fetch_task.done():
+                            if self.stop_requested:
+                                fetch_task.cancel()
+                                break
+                            await asyncio.wait([fetch_task], timeout=1.0)
+                            
+                        if self.stop_requested:
+                            break
+                            
+                        response_stream = fetch_task.result()
                         
                         model_parts = []
                         function_calls = []
                         full_text = ""
                         
-                        async for chunk in response_stream:
+                        iterator = response_stream.__aiter__()
+                        
+                        while True:
+                            if self.stop_requested:
+                                break
+                                
+                            chunk_task = asyncio.create_task(iterator.__anext__())
+                            while not chunk_task.done():
+                                if self.stop_requested:
+                                    chunk_task.cancel()
+                                    break
+                                await asyncio.wait([chunk_task], timeout=1.0)
+                                
+                            if self.stop_requested:
+                                break
+                                
+                            try:
+                                chunk = chunk_task.result()
+                            except StopAsyncIteration:
+                                break
+                                
                             if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
                                  for part in chunk.candidates[0].content.parts:
                                      model_parts.append(part)
@@ -257,6 +326,9 @@ class AppMigrationAgent:
                                      if part.function_call:
                                          function_calls.append(part.function_call)
                                          
+                        if self.stop_requested:
+                            break
+                            
                         break # Success!
                     except Exception as api_e:
                         if attempt < max_retries - 1:
@@ -268,6 +340,12 @@ class AppMigrationAgent:
                             logger.error(f"API stream failed after {max_retries} attempts: {api_e}")
                             raise api_e # Re-raise to be caught by the outer try-except loop
                 
+                if self.stop_requested:
+                    logger.info("Migration agent stopped by user mid-API call.")
+                    yield {"type": "log", "content": "Migration agent stopped by user request."}
+                    termination_reason = "stopped"
+                    break
+
                 if not model_parts:
                     yield {"type": "log", "content": "Model returned empty response. Halting."}
                     break
@@ -290,6 +368,8 @@ class AppMigrationAgent:
                             tool_desc = f"Modifying file: {args_dict.get('filepath', '')}"
                         elif fc.name == "search_web":
                             tool_desc = f"Searching web for: {args_dict.get('query', '')}"
+                        elif fc.name == "log_context":
+                            tool_desc = f"Logging context: {args_dict.get('entry', '')}"
                             
                         yield {"type": "live_activity", "content": tool_desc}
                         yield {"type": "log", "content": f"🔧 Executing Tool: {fc.name}({args_dict})"}
@@ -307,6 +387,8 @@ class AppMigrationAgent:
                             response_data = await self._write_file(args_dict.get("filepath", ""), args_dict.get("content", ""))
                         elif fc.name == "search_web":
                             response_data = await self._search_web(args_dict.get("query", ""))
+                        elif fc.name == "log_context":
+                            response_data = await self._log_context(args_dict.get("entry", ""))
                         
                         tool_outputs.append(
                             types.Part(
