@@ -156,7 +156,7 @@ class AppMigrationAgent:
         types.Tool(function_declarations=[
             types.FunctionDeclaration(
                 name="execute_shell_command",
-                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory of the application.",
+                description="Run shell commands (like 'mvn test', 'ls', 'grep') in the root directory. If the command modifies code, dependencies or runs tests, you MUST call the `log_context` tool concurrently.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -178,7 +178,7 @@ class AppMigrationAgent:
             ),
             types.FunctionDeclaration(
                 name="write_file",
-                description="Modify or create a file in the workspace. Will overwrite if exists.",
+                description="Modify or create a file in the workspace. Will overwrite if exists. You MUST call the `log_context` tool concurrently whenever you use this tool.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
@@ -201,7 +201,7 @@ class AppMigrationAgent:
             ),
             types.FunctionDeclaration(
                 name="log_context",
-                description="Append a short, crisp summary of a code change you just made, or a failed attempt, to your continuous context log. You MUST use this after making modifications to keep track of your progress.",
+                description="Append a short, crisp summary to your continuous context log. You MUST call this tool concurrently whenever you use `write_file` or execute a modifying shell command.",
                 parameters=types.Schema(
                     type=types.Type.OBJECT,
                     properties={
