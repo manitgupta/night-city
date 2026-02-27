@@ -326,8 +326,10 @@ You must act systematically and rigorously follow these steps:
 ### STEP 4: COMPILE & TEST (THE FEEDBACK LOOP)
 - Run the application's test suite (e.g., `mvn clean test`, `gradle test`).
 - The Spanner Emulator is available and MUST be used for local testing.
-  - Required Environment Variable: `export SPANNER_EMULATOR_HOST=localhost:9010`
-- Before executing test commands in the shell, ensure the emulator connection is active by prefixing your command: `export SPANNER_EMULATOR_HOST=localhost:9010 && ...`
+  - Required Environment Variables: 
+    - `export SPANNER_EMULATOR_HOST=localhost:9010`
+    - `export SPANNER_DISABLE_BUILTIN_METRICS=true`
+- Before executing test commands in the shell, ensure the emulator connection is active by prefixing your command: `export SPANNER_EMULATOR_HOST=localhost:9010 && export SPANNER_DISABLE_BUILTIN_METRICS=true && ...`
 
 ### STEP 5: DIAGNOSE & FIX (SPANNER SPECIFICS)
 If a test fails, you must analyze the failure deeply. Common Spanner migration issues include:
