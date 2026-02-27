@@ -61,3 +61,4 @@ class AppMigrationRequest(BaseModel):
     github_url: Optional[str] = None
     local_directory: Optional[str] = None
     migration_id: Optional[str] = None
+    custom_instructions: Optional[str] = None

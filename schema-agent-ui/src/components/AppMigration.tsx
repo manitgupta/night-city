@@ -23,6 +23,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
   const [githubUrl, setGithubUrl] = useState("");
   const [localDirectory, setLocalDirectory] = useState("");
   const [inputType, setInputType] = useState<'github' | 'local'>('github');
+  const [customInstructions, setCustomInstructions] = useState("");
   const [migrationState, setMigrationState] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
   const [activeMigrationId, setActiveMigrationId] = useState<string | null>(null);
 
@@ -71,8 +72,8 @@ export function AppMigration({ onBack }: AppMigrationProps) {
 
     try {
       const payload = inputType === 'github' 
-        ? { github_url: githubUrl, migration_id: migrationId } 
-        : { local_directory: localDirectory, migration_id: migrationId };
+        ? { github_url: githubUrl, migration_id: migrationId, custom_instructions: customInstructions } 
+        : { local_directory: localDirectory, migration_id: migrationId, custom_instructions: customInstructions };
         
       const response = await fetch(`${API_BASE_URL}/api/migrate-app`, {
         method: "POST",
@@ -262,6 +263,22 @@ export function AppMigration({ onBack }: AppMigrationProps) {
                   <ArrowRight size={20} className="group-hover/btn:translate-x-1 transition-transform" />
                 </button>
               </div>
+            </div>
+
+            {/* Custom Instructions */}
+             <div className="w-full relative group mt-8">
+              <label className="block text-lg font-medium text-zinc-300 mb-2 ml-1">
+                Custom Instructions
+              </label>
+              {/* Glowing Border effect */}
+              <div className="absolute top-7 -inset-1 bg-gradient-to-r from-cyan-500/30 via-emerald-500/30 to-cyan-500/30 rounded-2xl blur-md opacity-20 group-hover:opacity-50 transition duration-700 group-hover:duration-200"></div>
+
+              <textarea
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder="Optional custom instructions for the agent (e.g., 'Use Maven instead of Gradle')..."
+                className="relative w-full h-32 bg-zinc-900/90 backdrop-blur-xl border border-zinc-800/80 rounded-2xl px-6 py-4 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-700 shadow-2xl transition-all duration-300 resize-none font-mono text-base block box-border"
+              />
             </div>
           </div>
         </div>

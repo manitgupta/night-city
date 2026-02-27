@@ -9,8 +9,9 @@ from app.prompts import generate_migration_agent_prompt
 logger = logging.getLogger(__name__)
 
 class AppMigrationAgent:
-    def __init__(self, workspace_dir: str):
+    def __init__(self, workspace_dir: str, custom_instructions: Optional[str] = None):
         self.workspace_dir = workspace_dir
+        self.custom_instructions = custom_instructions
         self.stop_requested = False
         self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
         api_key = os.getenv("GEMINI_API_KEY")
@@ -224,7 +225,7 @@ class AppMigrationAgent:
         """
         Runs the autonomous migration loop. Yields ndjson chunks to be sent to frontend.
         """
-        base_system_instruction = generate_migration_agent_prompt()
+        base_system_instruction = generate_migration_agent_prompt(self.custom_instructions)
 
         contents = [
             types.Content(

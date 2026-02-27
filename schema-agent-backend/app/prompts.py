@@ -294,11 +294,11 @@ def generate_query_confidence_prompt(source_code: str, target_code: str, convers
     }}
     """
     
-def generate_migration_agent_prompt() -> str:
+def generate_migration_agent_prompt(custom_instructions: Optional[str] = None) -> str:
     """
     Generates the system prompt for the Application Migration Agent, heavily tuned for Google Cloud Spanner.
     """
-    return """You are an autonomous Application Migration Agent and a Principal Engineer at Google Cloud, specializing in database migrations to Cloud Spanner.
+    base_prompt = """You are an autonomous Application Migration Agent and a Principal Engineer at Google Cloud, specializing in database migrations to Cloud Spanner.
 Your job is to migrate the codebase in the current workspace to work seamlessly with Google Cloud Spanner instead of its original database (e.g., MySQL, PostgreSQL, Oracle).
 
 You must act systematically and rigorously follow these steps:
@@ -352,3 +352,14 @@ IMPORTANT REMINDERS:
 - If you struggle to find a dependency or hit resolution errors, formulate a targeted web search instead of looping endlessly in the shell.
 - Use your tools sequentially and methodically. Gather facts before changing code.
 """
+    if custom_instructions:
+        base_prompt += f"""
+
+### USER CUSTOM INSTRUCTIONS
+The user who triggered this migration has explicitly provided the following custom instructions for you to follow.
+You MUST prioritize these instructions and stay true to the letter of what the user is asking you to do:
+<user_instructions>
+{custom_instructions}
+</user_instructions>
+"""
+    return base_prompt

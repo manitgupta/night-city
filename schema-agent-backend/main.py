@@ -189,7 +189,10 @@ async def migrate_app(request: AppMigrationRequest):
                     raise ValueError("Either github_url or local_directory must be provided")
                 
                 # 2. Start Agent
-                agent = AppMigrationAgent(workspace_dir=workspace_path)
+                agent = AppMigrationAgent(
+                    workspace_dir=workspace_path,
+                    custom_instructions=request.custom_instructions
+                )
                 
                 if request.migration_id:
                     active_migrations[request.migration_id] = agent
