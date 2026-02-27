@@ -24,6 +24,7 @@ export function AppMigration({ onBack }: AppMigrationProps) {
   const [localDirectory, setLocalDirectory] = useState("");
   const [inputType, setInputType] = useState<'github' | 'local'>('github');
   const [customInstructions, setCustomInstructions] = useState("");
+  const [midFlightInstruction, setMidFlightInstruction] = useState("");
   const [migrationState, setMigrationState] = useState<'idle' | 'streaming' | 'complete' | 'error'>('idle');
   const [activeMigrationId, setActiveMigrationId] = useState<string | null>(null);
 
@@ -169,6 +170,31 @@ export function AppMigration({ onBack }: AppMigrationProps) {
         }
     } catch (error) {
          console.error("Error stopping migration:", error);
+    }
+  };
+
+  const handleSendInstruction = async () => {
+    if (!activeMigrationId || !midFlightInstruction.trim()) return;
+    
+    // Optimistic UI update
+    setLogs(prev => [...prev, `🔧 Queued guidance for agent: "${midFlightInstruction}"`]);
+    setMidFlightInstruction("");
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/guide-migration/${activeMigrationId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ instruction: midFlightInstruction })
+      });
+      if (!response.ok) {
+        console.error("Failed to send instruction:", await response.text());
+        setLogs(prev => [...prev, `Result: ERROR: Failed to send instruction to backend.`]);
+      }
+    } catch (error) {
+       console.error("Error sending instruction:", error);
+       setLogs(prev => [...prev, `Result: ERROR: ${error}`]);
     }
   };
 
@@ -402,6 +428,27 @@ export function AppMigration({ onBack }: AppMigrationProps) {
                     )}
                   </div>
                 ))}
+              </div>
+              
+              {/* Mid-flight Instruction Box */}
+              <div className="mt-4 flex gap-2 w-full">
+                <input
+                  type="text"
+                  value={midFlightInstruction}
+                  onChange={(e) => setMidFlightInstruction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSendInstruction();
+                  }}
+                  placeholder="Guide the agent (e.g., 'Stop trying to fix that test and move on')..."
+                  className="flex-1 bg-zinc-950/80 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                />
+                <button
+                  onClick={handleSendInstruction}
+                  disabled={!midFlightInstruction.trim()}
+                  className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
               </div>
             </div>
           </div>

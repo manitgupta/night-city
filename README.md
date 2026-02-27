@@ -1,6 +1,6 @@
 # <img src="schema-agent-ui/assets/logo.png" width="48" height="48" style="vertical-align: middle;" /> Night City: Agentic Spanner Migration Assistant
 
-**Night City** is an intelligent, human-in-the-loop migration assistant designed to modernize legacy databases for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make both **Schema Migration** and **Query Conversion** interactive and seamless.
+**Night City** is an intelligent, human-in-the-loop migration assistant designed to modernize legacy databases and their associated applications for Google Cloud Spanner. It combines a powerful LLM-based agent with a developer-focused UI to make **Schema Migration**, **Query Conversion**, and **Application Migration** interactive and seamless.
 
 <p align="center">
   <img src="schema-agent-ui/assets/output.gif" alt="Demo" />
@@ -8,10 +8,11 @@
 
 ## 🚀 Key Features
 
-### 1. Dual-Mode Migration
-Night City provides two distinct, specialized workflows:
-- **Schema Conversion**: Migrate DDL (Tables, Indexes, Constraints) from legacy databases to Spanner.
-- **Query Conversion**: Translate complex SQL queries to optimized Spanner GoogleSQL.
+### 1. Comprehensive Migration Workflows
+Night City provides three distinct, specialized workflows, tackling migration challenges in order of their increasing complexity:
+- **Schema Conversion**: Migrate legacy DDL (Tables, Indexes, Constraints) to Spanner-optimized schemas.
+- **Query Conversion**: Translate complex legacy SQL queries into performant Spanner GoogleSQL.
+- **Application Migration**: Automatically refactor entire application codebases (via GitHub URL or local directory) to integrate with Google Cloud Spanner's client libraries and best practices.
 
 ### 2. Agentic Intelligence
 - **Smart Validation Loop**: The agent doesn't just guess. It generates code, *automatically verifies* it against a real Spanner instance, and self-corrects errors in a multi-turn loop until the result is valid.
@@ -175,6 +176,13 @@ gcloud run deploy night-city \
 3.  **Connect Spanner**: Ensure you are connected to the target Spanner database (to verify column existence/types).
 4.  **Convert**: The agent will generate the equivalent GoogleSQL.
 5.  **Run**: Click "Validate" (or Run) to execute the query specifically against your Spanner database and see live results.
+
+### Application Migration
+1.  **Select Mode**: Switch to "App Migration" from the landing page.
+2.  **Provide Source**: Input a GitHub repository URL or provide a local directory path.
+3.  **Migrate**: The agent iteratively refactors your code, identifying database interactions and rewriting them for Spanner.
+4.  **Guide the Agent**: Provide real-time guidance via the chat interface to steer the agent's technical decisions during migration.
+5.  **Review**: Inspect the refactored workspace, execute the application against a Spanner Emulator, and verify the modernized codebase.
 
 ## 🤝 Contributing
 Contributions are welcome! Please ensure tests are added for new features.

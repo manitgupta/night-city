@@ -19,6 +19,12 @@ class AppMigrationAgent:
             logger.error("GEMINI_API_KEY not found.")
         self.client = genai.Client(api_key=api_key)
         self.context_log = []
+        self.mid_run_instructions = []
+
+    def add_mid_run_instruction(self, instruction: str):
+        """Appends a user instruction and ensures it is communicated to the model."""
+        self.mid_run_instructions.append(instruction)
+        logger.info(f"Added mid-run instruction: {instruction}")
 
     async def _execute_shell_command_stream(self, command: str):
         """Executes a shell command in the workspace directory asynchronously and yields output."""
@@ -269,6 +275,12 @@ class AppMigrationAgent:
                         dynamic_instruction += f"{i}. {log_entry}\n"
                 else:
                     dynamic_instruction += "\n\n### ACTIVE MIGRATION CONTEXT LOG\nNo context logged yet.\n"
+                    
+                if self.mid_run_instructions:
+                    dynamic_instruction += "\n\n### CRITICAL: MID-RUN USER INSTRUCTIONS\n"
+                    dynamic_instruction += "The user has interrupted your current flow to provide the following highly important real-time guidance. You MUST prioritize these instructions above all autonomous decisions immediately.\n"
+                    for i, instr in enumerate(self.mid_run_instructions, 1):
+                        dynamic_instruction += f"{i}. {instr}\n"
                     
                 dynamic_config = types.GenerateContentConfig(
                     tools=self._tools,

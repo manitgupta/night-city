@@ -62,3 +62,6 @@ class AppMigrationRequest(BaseModel):
     local_directory: Optional[str] = None
     migration_id: Optional[str] = None
     custom_instructions: Optional[str] = None
+
+class GuideMigrationRequest(BaseModel):
+    instruction: str

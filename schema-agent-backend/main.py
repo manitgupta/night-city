@@ -29,7 +29,7 @@ REQUIRED_ENV_VARS = ["GEMINI_API_KEY", "SPANNER_PROJECT_ID", "SPANNER_INSTANCE_I
 # Import app modules AFTER loading environment variables
 # This ensures that any module-level initialization (like ADK Agent) picks up the correct env vars
 from app.agent import agent_service
-from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest, AppMigrationRequest
+from app.models import ConversionRequest, ConversionResponse, ChatRequest, ChatResponse, AnalyzeRequest, AnalyzeResponse, SpannerConnectionConfig, SpannerConnectionResponse, QueryConversionRequest, SpannerQueryRequest, AppMigrationRequest, GuideMigrationRequest
 from app.session_store import SessionStore
 
 from app.query.spanner_tool import SpannerDatabaseTool
@@ -263,6 +263,14 @@ async def stop_migration(migration_id: str):
     if migration_id in active_migrations:
         active_migrations[migration_id].stop_requested = True
         return {"success": True, "message": "Migration stop requested."}
+    else:
+        raise HTTPException(status_code=404, detail="Migration not found or already completed.")
+
+@app.post("/api/guide-migration/{migration_id}")
+async def guide_migration(migration_id: str, request: GuideMigrationRequest):
+    if migration_id in active_migrations:
+        active_migrations[migration_id].add_mid_run_instruction(request.instruction)
+        return {"success": True, "message": "Instruction queued for next agent turn."}
     else:
         raise HTTPException(status_code=404, detail="Migration not found or already completed.")
 
