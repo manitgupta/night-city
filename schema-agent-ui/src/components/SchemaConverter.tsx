@@ -14,7 +14,8 @@ const SOURCE_DIALECTS = [
   { id: 'postgres', name: 'PostgreSQL' },
   { id: 'oracle', name: 'Oracle' },
   { id: 'sqlserver', name: 'SQL Server' },
-  { id: 'cassandra', name: 'Cassandra' }
+  { id: 'cassandra', name: 'Cassandra' },
+  { id: 'neo4j', name: 'Neo4J' }
 ];
 
 interface SchemaConverterProps {

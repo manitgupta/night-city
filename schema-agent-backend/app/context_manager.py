@@ -50,6 +50,8 @@ class ContextManager:
             return self.mappings.get("SQL Server", [])
         elif "cassandra" in d or "cql" in d:
             return self.mappings.get("Cassandra", [])
+        elif "neo4j" in d or "cypher" in d:
+            return self.mappings.get("Neo4J", [])
         return []
 
     def format_hints_for_prompt(self, ddl_hints: List[Dict[str, str]], feature_hints: List[Dict[str, str]], mapping_rules: List[Dict[str, str]]) -> str:
