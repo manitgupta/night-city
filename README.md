@@ -129,7 +129,7 @@ spec:
               value: "your-project-id"
             - name: SPANNER_INSTANCE_ID
               value: "your-instance-id"
-            - name: SPANNER_EMULATOR_HOST
+            - name: VERIFICATION_EMULATOR_HOST
               value: "localhost:9010"
         - image: gcr.io/cloud-spanner-emulator/emulator
           name: spanner-emulator

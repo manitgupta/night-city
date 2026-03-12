@@ -50,14 +50,40 @@ class SpannerVerificationTool:
     def __init__(self):
         """
         Initializes the SpannerVerificationTool.
-        Uses the Singleton Spanner Client/Instance for efficiency.
+        Explicitly connects to the emulator using anonymous credentials if VERIFICATION_EMULATOR_HOST is set.
+        Otherwise, connects to the real Google Cloud project.
         """
-        self.instance = SpannerSingleton.get_instance_obj()
-        self.client = SpannerSingleton.get_client()
+        from google.auth.credentials import AnonymousCredentials
+        from google.api_core.client_options import ClientOptions
         
-        # Fallback logging if singleton failed
-        if not self.instance:
-            logger.warning("SpannerVerificationTool initialized without a valid Spanner Instance connection.")
+        emulator_host = os.getenv("VERIFICATION_EMULATOR_HOST")
+        
+        try:
+            if emulator_host:
+                self.project_id = "test-project"
+                self.instance_id = "test-instance"
+                options = ClientOptions(api_endpoint=emulator_host)
+                self.client = spanner.Client(
+                    project=self.project_id,
+                    credentials=AnonymousCredentials(),
+                    client_options=options
+                )
+                logger.info(f"Initialized SpannerVerificationTool pointing to emulator at {emulator_host}")
+            else:
+                self.project_id = os.getenv("SPANNER_PROJECT_ID")
+                self.instance_id = os.getenv("SPANNER_INSTANCE_ID")
+                
+                if not self.project_id or not self.instance_id:
+                     raise ValueError("SPANNER_PROJECT_ID and SPANNER_INSTANCE_ID must be set when VERIFICATION_EMULATOR_HOST is not provided.")
+                
+                self.client = spanner.Client(project=self.project_id)
+                logger.info(f"Initialized SpannerVerificationTool pointing to real GCP project {self.project_id}")
+                
+            self.instance = self.client.instance(self.instance_id)
+        except Exception as e:
+            logger.error(f"Failed to initialize SpannerVerificationTool client: {e}")
+            self.instance = None
+            self.client = None
 
     async def verify_ddl(self, ddl: str, background_tasks: Optional[BackgroundTasks] = None) -> Dict[str, Any]:
         """
