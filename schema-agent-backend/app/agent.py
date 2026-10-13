@@ -22,7 +22,7 @@ class SchemaAgentService:
     _instance = None
 
     def __init__(self):
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         logger.info(f"SchemaAgentService initialized with model: {self.model_name}")
         # ADK Agent
         self.agent = Agent(
@@ -655,14 +655,15 @@ class SchemaAgentService:
                             tool_outputs.append(
                                 types.Part(
                                     function_response=types.FunctionResponse(
+                                        id=fc.id,
                                         name=fc.name,
                                         response=verification_result
                                     )
                                 )
                             )
-                    
-                    # Append Tool Turn to History with role='tool'
-                    contents.append(types.Content(role="tool", parts=tool_outputs))
+
+                    # Append Tool Turn to History with role='user'; the API rejects role='tool'
+                    contents.append(types.Content(role="user", parts=tool_outputs))
                     
                     # If we just verified successfully, we might want to ensure the next turn is just the report.
                     continue # Next iteration sends updated history
@@ -986,13 +987,14 @@ class SchemaAgentService:
                          tool_outputs.append(
                             types.Part(
                                 function_response=types.FunctionResponse(
+                                    id=fc.id,
                                     name=fc.name,
                                     response=result
                                 )
                             )
                         )
-                    
-                    contents.append(types.Content(role="tool", parts=tool_outputs))
+
+                    contents.append(types.Content(role="user", parts=tool_outputs))
                     continue
                 else:
                     # Done

@@ -64,7 +64,7 @@ SPANNER_INSTANCE_ID="your-instance-id"
 
 # Model Configuration
 GEMINI_API_KEY="your-gemini-api-key"
-GEMINI_MODEL="gemini-3-pro-preview" # or gemini-1.5-pro
+GEMINI_MODEL="gemini-3.8-flash"
 ```
 
 ### 2. Running Locally

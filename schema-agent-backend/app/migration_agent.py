@@ -13,7 +13,7 @@ class AppMigrationAgent:
         self.workspace_dir = workspace_dir
         self.custom_instructions = custom_instructions
         self.stop_requested = False
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY not found.")
@@ -424,16 +424,18 @@ class AppMigrationAgent:
                         tool_outputs.append(
                             types.Part(
                                 function_response=types.FunctionResponse(
+                                    id=fc.id,
                                     name=fc.name,
                                     response={"result": response_data}
                                 )
                             )
                         )
-                        
-                        
+
+
                         yield {"type": "log", "content": f"Result of {fc.name}:\n{response_data}"}
-                        
-                    contents.append(types.Content(role="tool", parts=tool_outputs))
+
+                    # Function responses go back with role='user'; the API rejects role='tool'
+                    contents.append(types.Content(role="user", parts=tool_outputs))
                     
                 else:
                     # No more function calls, we are done
